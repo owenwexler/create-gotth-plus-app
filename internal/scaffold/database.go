@@ -1,8 +1,6 @@
 package scaffold
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -15,18 +13,44 @@ import (
 // generation fails until the replacement has been reviewed and the hash updated.
 var replacedFiles = map[string]string{
 	"internal/database/database.go": "5a9d9edb553e97024c64ae070dea83eb50d3dafdef01be5e86021621c2e62bff",
+	"air.toml":                      "97d30276e3a1e649d03f82c483c8e18478821fbd23a83917dd991ebbf5d23579",
 }
 
-// depsKey names the go.mod/go.sum pair in _deps for a database choice; "" means the template's own
-// (the template uses CGO SQLite).
-func depsKey(o options.Options) string {
+// DepsKey names the go.mod/go.sum pair in _deps for o: the choices that change the dependencies.
+func DepsKey(o options.Options) string {
+	key := "sqlite-cgo"
 	switch {
 	case o.Database.IsServer():
-		return string(o.Database)
+		key = string(o.Database)
 	case o.SQLiteDriver == options.PureGo:
-		return "sqlite-purego"
+		key = "sqlite-purego"
 	}
-	return ""
+	if !o.E2E {
+		key += "-noe2e" // no playwright-go
+	}
+	return key
+}
+
+// DepsChoices returns one Options for each go.mod/go.sum pair in _deps.
+func DepsChoices() []options.Options {
+	var all []options.Options
+	for _, db := range []struct {
+		db     options.Database
+		driver options.SQLiteDriver
+	}{
+		{options.SQLite, options.CGO},
+		{options.SQLite, options.PureGo},
+		{options.Postgres, options.PureGo},
+		{options.MySQL, options.PureGo},
+	} {
+		for _, e2e := range []bool{true, false} {
+			o := options.Defaults()
+			o.Database, o.SQLiteDriver, o.E2E = db.db, db.driver, e2e
+			o.Axe = e2e
+			all = append(all, o)
+		}
+	}
+	return all
 }
 
 // applyDatabase adjusts the project to the chosen database. It runs before the module is renamed,
@@ -233,14 +257,9 @@ func (p Project) overlay(name string) error {
 			return err
 		}
 		rel := strings.TrimPrefix(path, root+"/")
-		if old, exists := p[rel]; exists {
-			want, ok := replacedFiles[rel]
-			if !ok {
-				return fmt.Errorf("variant %s replaces %s, which is not listed in replacedFiles", name, rel)
-			}
-			sum := sha256.Sum256(old)
-			if got := hex.EncodeToString(sum[:]); got != want {
-				return fmt.Errorf("template file %s changed (sha256 %s); review _variants/*/%s against it, then update replacedFiles", rel, got, rel)
+		if _, exists := p[rel]; exists {
+			if err := p.checkReplaceable(rel); err != nil {
+				return fmt.Errorf("variant %s: %w", name, err)
 			}
 		}
 		b, err := fs.ReadFile(embedded, path)

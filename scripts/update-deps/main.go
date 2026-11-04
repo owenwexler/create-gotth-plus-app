@@ -13,21 +13,16 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/owenwexler/create-gotth-plus-app/internal/options"
 	"github.com/owenwexler/create-gotth-plus-app/internal/scaffold"
 )
 
-// choices are the database choices with their own dependencies, and the modules `go get` updates
-// to their latest version for each. Everything else stays at the template's versions.
-var choices = []struct {
-	key     string
-	db      options.Database
-	driver  options.SQLiteDriver
-	modules []string
-}{
-	{"sqlite-purego", options.SQLite, options.PureGo, []string{"github.com/glebarez/sqlite@latest", "github.com/glebarez/go-sqlite@latest", "modernc.org/sqlite@latest"}},
-	{"postgres", options.Postgres, options.PureGo, []string{"gorm.io/driver/postgres@latest", "github.com/jackc/pgx/v5@latest"}},
-	{"mysql", options.MySQL, options.PureGo, []string{"gorm.io/driver/mysql@latest", "github.com/go-sql-driver/mysql@latest"}},
+// modules are updated to their latest version for each database choice (the DepsKey without
+// -noe2e). Everything else stays at the template's versions.
+var modules = map[string][]string{
+	"sqlite-cgo":    nil,
+	"sqlite-purego": {"github.com/glebarez/sqlite@latest", "github.com/glebarez/go-sqlite@latest", "modernc.org/sqlite@latest"},
+	"postgres":      {"gorm.io/driver/postgres@latest", "github.com/jackc/pgx/v5@latest"},
+	"mysql":         {"gorm.io/driver/mysql@latest", "github.com/go-sql-driver/mysql@latest"},
 }
 
 func main() {
@@ -49,20 +44,18 @@ func run() error {
 		return err
 	}
 
-	for _, c := range choices {
-		fmt.Printf("== %s\n", c.key)
-		dir, err := os.MkdirTemp("", "update-deps-"+c.key+"-")
+	for _, o := range scaffold.DepsChoices() {
+		key := scaffold.DepsKey(o)
+		fmt.Printf("== %s\n", key)
+		dir, err := os.MkdirTemp("", "update-deps-"+key+"-")
 		if err != nil {
 			return err
 		}
 		defer os.RemoveAll(dir)
 
-		o := options.Defaults()
 		o.Name = "app"
 		// keep the template's module path, so the saved go.mod needs no renaming
 		o.ModulePath = templateModule
-		o.Database = c.db
-		o.SQLiteDriver = c.driver
 		p, err := scaffold.BuildWithoutDeps(tmpl, o, dir)
 		if err != nil {
 			return err
@@ -71,14 +64,16 @@ func run() error {
 			return err
 		}
 
-		if err := goCmd(dir, append([]string{"get"}, c.modules...)...); err != nil {
-			return err
+		if mods := modules[strings.TrimSuffix(key, "-noe2e")]; len(mods) > 0 {
+			if err := goCmd(dir, append([]string{"get"}, mods...)...); err != nil {
+				return err
+			}
 		}
 		if err := goCmd(dir, "mod", "tidy"); err != nil {
 			return err
 		}
 
-		dest := filepath.Join(out, c.key)
+		dest := filepath.Join(out, key)
 		if err := os.MkdirAll(dest, 0o755); err != nil {
 			return err
 		}

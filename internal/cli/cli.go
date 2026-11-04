@@ -61,7 +61,8 @@ type flags struct {
 	db           string
 	sqliteDriver string
 
-	js, axe, git, setup bool
+	js, axe, git, setup, e2e bool
+	liveReload               string
 
 	set  map[string]bool
 	name string // the positional project name, if any
@@ -84,6 +85,8 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&f.seedAdminKey, "seed-admin-key", defaults.SeedAdminKey, "write a random SeedAdminKey into .env (--seed-admin-key=false to skip)")
 	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
 	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
+	fs.BoolVar(&f.e2e, "e2e", defaults.E2E, "include the Playwright end-to-end (browser) tests")
+	fs.StringVar(&f.liveReload, "live-reload", string(defaults.LiveReload), "what make dev runs: templ (templ's proxy) or air")
 	fs.BoolVar(&f.js, "js", defaults.CommitJS, "download htmx, Alpine (CSP) and hx-optimistic, record their versions and hashes, and commit them")
 	fs.BoolVar(&f.axe, "axe", defaults.Axe, "download axe-core for the accessibility test")
 	fs.BoolVar(&f.git, "git", defaults.Git, "git init and make a first commit")
@@ -184,7 +187,16 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	if opts.SQLiteDriver, err = options.ParseSQLiteDriver(f.sqliteDriver); err != nil {
 		return err
 	}
-	opts.CommitJS, opts.Axe, opts.Git, opts.Setup = f.js, f.axe, f.git, f.setup
+	opts.CommitJS, opts.Axe, opts.Git, opts.Setup, opts.E2E = f.js, f.axe, f.git, f.setup, f.e2e
+	if opts.LiveReload, err = options.ParseLiveReload(f.liveReload); err != nil {
+		return err
+	}
+	if !opts.E2E {
+		if f.set["axe"] && f.axe {
+			return errors.New("--axe only applies with the E2E tests (--e2e)")
+		}
+		opts.Axe = false // axe-core is only used by the E2E tests
+	}
 	if f.set["sqlite-driver"] && f.set["db"] && opts.Database != options.SQLite {
 		return errors.New("--sqlite-driver only applies to --db=sqlite")
 	}
@@ -210,6 +222,9 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	if interactive {
 		if err := p.askRest(ctx, &opts, f.set); err != nil {
 			return err
+		}
+		if !opts.E2E {
+			opts.Axe = false
 		}
 	}
 
@@ -279,7 +294,7 @@ func checkTools(ctx context.Context, stdio IO, tmpl fs.FS, opts options.Options)
 	if stdio.Tools != nil {
 		runner = *stdio.Tools
 	}
-	tools := prereq.Tools(prereq.Requirements{Go: goVersion, Templ: templVersion}, prereq.Needs{CCompiler: opts.NeedsCCompiler()})
+	tools := prereq.Tools(prereq.Requirements{Go: goVersion, Templ: templVersion}, prereq.Needs{CCompiler: opts.NeedsCCompiler(), Air: opts.LiveReload == options.Air})
 	prereq.Report(stdio.Out, runner.Check(ctx, tools))
 	fmt.Fprintln(stdio.Out)
 	return nil
@@ -305,6 +320,8 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 		{"Module path", o.ModulePath},
 		{"Database", o.DatabaseLabel()},
 		{"Port", strconv.Itoa(o.Port)},
+		{"E2E tests", yesNo(o.E2E)},
+		{"Live reload", string(o.LiveReload)},
 		{"Random SeedAdminKey", yesNo(o.SeedAdminKey)},
 		{"Commit JS libraries", yesNo(o.CommitJS)},
 		{"Download axe-core", yesNo(o.Axe)},

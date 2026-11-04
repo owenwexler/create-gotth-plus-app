@@ -132,6 +132,8 @@ func TestErrors(t *testing.T) {
 		{"bad db", []string{"--yes", "app", "--db", "oracle"}, exitError, "unknown database"},
 		{"bad sqlite driver", []string{"--yes", "app", "--sqlite-driver", "wasm"}, exitError, "unknown SQLite driver"},
 		{"sqlite driver with postgres", []string{"--yes", "app", "--db=postgres", "--sqlite-driver=cgo"}, exitError, "only applies to --db=sqlite"},
+		{"axe without e2e", []string{"--yes", "app", "--e2e=false", "--axe"}, exitError, "only applies with the E2E tests"},
+		{"bad live reload", []string{"--yes", "app", "--live-reload=fresh"}, exitError, "unknown live reload"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -219,6 +221,28 @@ func TestAfterCreationFlags(t *testing.T) {
 	}
 	if strings.Contains(out, "make setup    #") {
 		t.Errorf("next steps repeat make setup after it ran:\n%s", out)
+	}
+}
+
+func TestNoE2ETurnsOffAxe(t *testing.T) {
+	var got options.Options
+	code, _, errOut := runWithPost(t, t.TempDir(), noPost{&got}, "--yes", "--e2e=false", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if got.E2E || got.Axe {
+		t.Errorf("post steps got E2E %v, Axe %v", got.E2E, got.Axe)
+	}
+}
+
+func TestAirIsChecked(t *testing.T) {
+	_, out, _ := runCLI(t, t.TempDir(), "--yes", "--live-reload=air", "app")
+	if !strings.Contains(out, "problem  air: not found") || !strings.Contains(out, "go install github.com/air-verse/air@latest") {
+		t.Errorf("air not checked:\n%s", out)
+	}
+	_, out, _ = runCLI(t, t.TempDir(), "--yes", "app")
+	if strings.Contains(out, "air:") {
+		t.Errorf("air checked without --live-reload=air:\n%s", out)
 	}
 }
 

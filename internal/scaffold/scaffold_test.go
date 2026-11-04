@@ -180,52 +180,69 @@ func TestGeneratedProjectBuilds(t *testing.T) {
 		t.Skip("runs go build, vet and test on generated projects")
 	}
 	for _, c := range choices {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
-			o := testOptions()
-			o.Name = "."
-			o.Database = c.db
-			o.SQLiteDriver = c.driver
-			if err := mustBuild(t, o, dir).Write(dir); err != nil {
-				t.Fatal(err)
+		for _, e2e := range []bool{true, false} {
+			name := c.name
+			if !e2e {
+				name += "-noe2e"
 			}
+			t.Run(name, func(t *testing.T) { testGeneratedProject(t, c.db, c.driver, c.serverEnv, e2e) })
+		}
+	}
+}
 
-			info, err := os.Stat(filepath.Join(dir, "download-js.sh"))
-			if err != nil || info.Mode().Perm() != 0o755 {
-				t.Errorf("download-js.sh is not executable: %v %v", info, err)
-			}
+// testGeneratedProject generates one project and checks it the way a user would build it.
+func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
+	o := testOptions()
+	o.Name = "."
+	o.Database, o.SQLiteDriver = db, driver
+	o.E2E, o.Axe = e2e, e2e
+	if err := mustBuild(t, o, dir).Write(dir); err != nil {
+		t.Fatal(err)
+	}
 
-			env := os.Environ()
-			if c.driver == options.PureGo || c.db.IsServer() {
-				env = append(env, "CGO_ENABLED=0") // proves the pure-Go drivers need no C compiler
-			}
-			cmds := [][]string{
-				{"mod", "tidy", "-diff"}, // _deps is up to date with the code
-				{"build", "./..."},
-				{"vet", "-tags", "e2e", "./..."},
-			}
-			switch {
-			case c.serverEnv == "":
-				cmds = append(cmds, []string{"test", "-count=1", "./..."})
-			case os.Getenv(c.serverEnv) != "":
-				env = append(env, "TestDatabaseURL="+os.Getenv(c.serverEnv))
-				cmds = append(cmds, []string{"test", "-count=1", "./..."})
-			default:
-				t.Logf("set %s to run the generated project's tests against a server", c.serverEnv)
-			}
-			for _, args := range cmds {
-				cmd := exec.Command("go", args...)
-				cmd.Dir = dir
-				cmd.Env = env
-				if out, err := cmd.CombinedOutput(); err != nil {
-					t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
-				}
-			}
-			if out, err := exec.Command("gofmt", "-l", dir).Output(); err != nil || len(out) > 0 {
-				t.Errorf("gofmt -l: %v\n%s", err, out)
-			}
-		})
+	info, err := os.Stat(filepath.Join(dir, "download-js.sh"))
+	if err != nil || info.Mode().Perm() != 0o755 {
+		t.Errorf("download-js.sh is not executable: %v %v", info, err)
+	}
+
+	env := os.Environ()
+	if driver == options.PureGo || db.IsServer() {
+		env = append(env, "CGO_ENABLED=0") // proves the pure-Go drivers need no C compiler
+	}
+	cmds := [][]string{
+		{"mod", "tidy", "-diff"}, // _deps is up to date with the code
+		{"build", "./..."},
+		{"vet", "-tags", "e2e", "./..."},
+	}
+	switch {
+	case serverEnv == "":
+		cmds = append(cmds, []string{"test", "-count=1", "./..."})
+	case os.Getenv(serverEnv) != "":
+		env = append(env, "TestDatabaseURL="+os.Getenv(serverEnv))
+		cmds = append(cmds, []string{"test", "-count=1", "./..."})
+	default:
+		t.Logf("set %s to run the generated project's tests against a server", serverEnv)
+	}
+	for _, args := range cmds {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = dir
+		cmd.Env = env
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	if out, err := exec.Command("gofmt", "-l", dir).Output(); err != nil || len(out) > 0 {
+		t.Errorf("gofmt -l: %v\n%s", err, out)
+	}
+	if !e2e {
+		// the Makefile still parses, and no target refers to the removed tests
+		out, err := exec.Command("make", "-C", dir, "-n", "setup", "vet", "test", "help").CombinedOutput()
+		text := string(out)
+		if err != nil || strings.Contains(text, "-tags e2e") || strings.Contains(text, "e2e-install") || strings.Contains(text, "playwright") {
+			t.Errorf("make -n: %v\n%s", err, out)
+		}
 	}
 }
 
@@ -279,6 +296,54 @@ func TestBuildDatabases(t *testing.T) {
 	}
 }
 
+func TestBuildWithoutE2E(t *testing.T) {
+	o := testOptions()
+	o.E2E, o.Axe = false, false
+	p := mustBuild(t, o, "/work/demo-app")
+
+	for _, f := range e2eFiles {
+		if _, ok := p[f]; ok {
+			t.Errorf("%s is still there", f)
+		}
+	}
+	for _, f := range []string{"go.mod", "Makefile"} {
+		if strings.Contains(strings.ToLower(string(p[f])), "playwright") || strings.Contains(string(p[f]), "e2e") {
+			t.Errorf("%s still mentions the E2E tests", f)
+		}
+	}
+	mustContain(t, p, "README.md", "created without the Playwright end-to-end tests")
+	mustContain(t, p, "SECURITY.md", "this project has no browser tests")
+	mustContain(t, p, "AGENTS.md", "There are no browser (E2E) tests.")
+	if strings.Contains(string(p["AGENTS.md"]), "e2e_helpers_test.go") {
+		t.Error("AGENTS.md still describes the E2E harness")
+	}
+}
+
+func TestLiveReload(t *testing.T) {
+	o := testOptions() // port 4000
+	p := mustBuild(t, o, "/work/demo-app")
+	// the air.toml fix applies either way, since make air exists in both
+	mustContain(t, p, "air.toml", `cmd = "templ generate && go build -o ./tmp/main ./cmd/server"`)
+	mustContain(t, p, "air.toml", "app_port = 4000\n")
+	mustContain(t, p, "Makefile", "\t$(MAKE) -j2 dev-css dev-templ\n")
+	mustContain(t, p, "Makefile", "\tair -c air.toml\n")
+
+	o.LiveReload = options.Air
+	p = mustBuild(t, o, "/work/demo-app")
+	mustContain(t, p, "Makefile", "\t$(MAKE) -j2 dev-css air\n")
+	mustContain(t, p, "README.md", "go install github.com/air-verse/air@latest")
+}
+
+func TestReplaceSpan(t *testing.T) {
+	p := Project{"f": []byte("a\ncodegen:\n\tcmd\nz")}
+	if err := p.replaceSpan("f", "\ncodegen:\n", "\n", ""); err != nil {
+		t.Fatal(err)
+	}
+	if string(p["f"]) != "az" {
+		t.Errorf("got %q", p["f"])
+	}
+}
+
 func mustContain(t *testing.T, p Project, file, want string) {
 	t.Helper()
 	if !strings.Contains(string(p[file]), want) {
@@ -294,7 +359,8 @@ func TestDepsNotOlderThanTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := requires(t, tmpl)
-	for _, key := range []string{"sqlite-purego", "postgres", "mysql"} {
+	for _, o := range DepsChoices() {
+		key := DepsKey(o)
 		b, err := fs.ReadFile(embedded, "_deps/"+key+"/"+goModTemplate)
 		if err != nil {
 			t.Fatalf("%s: %v (run make update-deps)", key, err)

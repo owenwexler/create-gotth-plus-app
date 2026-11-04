@@ -29,6 +29,11 @@ type Options struct {
 	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
 	SQLiteDriver SQLiteDriver
 
+	// E2E keeps the Playwright end-to-end tests (cmd/server/e2e_*_test.go).
+	E2E bool
+	// LiveReload is what make dev runs.
+	LiveReload LiveReload
+
 	// What happens after the files are written.
 
 	// CommitJS downloads htmx, Alpine (CSP) and hx-optimistic, records their versions and hashes,
@@ -70,6 +75,25 @@ func (d Database) Label() string {
 // IsServer reports whether the database runs as a separate server (as opposed to a file).
 func (d Database) IsServer() bool { return d == Postgres || d == MySQL }
 
+// LiveReload is a live-reload tool for make dev.
+type LiveReload string
+
+const (
+	// TemplProxy is templ generate --watch with its browser-reloading proxy.
+	TemplProxy LiveReload = "templ"
+	// Air is github.com/air-verse/air with its browser-reloading proxy.
+	Air LiveReload = "air"
+)
+
+// ParseLiveReload reads a --live-reload value.
+func ParseLiveReload(s string) (LiveReload, error) {
+	switch LiveReload(s) {
+	case TemplProxy, Air:
+		return LiveReload(s), nil
+	}
+	return "", fmt.Errorf("unknown live reload %q; use templ or air", s)
+}
+
 // SQLiteDriver is a GORM SQLite driver.
 type SQLiteDriver string
 
@@ -106,6 +130,8 @@ func Defaults() Options {
 		SeedAdminKey: true,
 		Database:     SQLite,
 		SQLiteDriver: PureGo,
+		E2E:          true,
+		LiveReload:   TemplProxy,
 		CommitJS:     true,
 		Axe:          true,
 		Git:          true,
@@ -220,6 +246,12 @@ func (o Options) Validate() error {
 	}
 	if _, err := ParseSQLiteDriver(string(o.SQLiteDriver)); err != nil {
 		return err
+	}
+	if _, err := ParseLiveReload(string(o.LiveReload)); err != nil {
+		return err
+	}
+	if o.Axe && !o.E2E {
+		return errors.New("axe-core is only used by the E2E tests; it can't be downloaded without them")
 	}
 	return validatePort(o.Port)
 }

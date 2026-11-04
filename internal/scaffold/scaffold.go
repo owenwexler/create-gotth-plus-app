@@ -129,11 +129,18 @@ func build(fsys fs.FS, opts options.Options, dir string, withDeps bool) (Project
 	}{
 		// the database step and the dependencies use the template's module path, so they come first
 		{"database", func() error { return applyDatabase(p, opts, templateModule, options.DatabaseName(name)) }},
+		{"E2E tests", func() error {
+			if opts.E2E {
+				return nil
+			}
+			return removeE2E(p)
+		}},
+		{"live reload", func() error { return applyLiveReload(p, opts) }},
 		{"dependencies", func() error {
 			if !withDeps {
 				return nil
 			}
-			return applyDeps(p, depsKey(opts))
+			return applyDeps(p, DepsKey(opts))
 		}},
 		{"JS libraries", func() error {
 			if !opts.CommitJS {
@@ -172,9 +179,6 @@ var ErrMissingDeps = errors.New("no go.mod/go.sum in _deps for this choice; run 
 // `make update-deps`, which runs go mod tidy on a generated project, so a new project needs no
 // network access to be consistent.
 func applyDeps(p Project, key string) error {
-	if key == "" {
-		return nil
-	}
 	// go.mod is stored as go.mod.tmpl: go:embed skips directories that contain a go.mod
 	for f, stored := range map[string]string{"go.mod": goModTemplate, "go.sum": "go.sum"} {
 		b, err := fs.ReadFile(embedded, "_deps/"+key+"/"+stored)
@@ -265,8 +269,10 @@ func setProjectName(p Project, name, version string) error {
 		"\t\t"+strconv.Quote("<title>"+html.EscapeString(name)+"</title>")+",\n"); err != nil {
 		return err
 	}
-	if err := p.replaceOnce("cmd/server/e2e_test.go", `ToHaveTitle("GOTTH+")`, "ToHaveTitle("+title+")"); err != nil {
-		return err
+	if _, ok := p["cmd/server/e2e_test.go"]; ok { // gone when the E2E tests are left out
+		if err := p.replaceOnce("cmd/server/e2e_test.go", `ToHaveTitle("GOTTH+")`, "ToHaveTitle("+title+")"); err != nil {
+			return err
+		}
 	}
 
 	readmeTitle := fmt.Sprintf("# %s\n\nGenerated with [create-gotth-plus-app](https://github.com/owenwexler/create-gotth-plus-app) from [GOTTH+](%s) (%s).\n", name, gotthPlusRepo, version)

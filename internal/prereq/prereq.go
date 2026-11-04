@@ -54,6 +54,8 @@ type Result struct {
 type Needs struct {
 	// CCompiler is needed by the CGO SQLite driver (mattn/go-sqlite3).
 	CCompiler bool
+	// Air is needed when make dev uses air.
+	Air bool
 }
 
 // Requirements are versions read from the template's go.mod.
@@ -115,6 +117,14 @@ func Tools(req Requirements, needs Needs) []Tool {
 			Install: "your package manager (brew install openssl, sudo apt install openssl)",
 			Check:   onPath("openssl"),
 		},
+	}
+	if needs.Air {
+		tools = append(tools, Tool{
+			Name:    "air",
+			Why:     "live reload (make dev)",
+			Install: "go install github.com/air-verse/air@latest",
+			Check:   onPath("air"),
+		})
 	}
 	if needs.CCompiler {
 		tools = append(tools, Tool{

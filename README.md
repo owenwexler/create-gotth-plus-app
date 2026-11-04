@@ -34,8 +34,10 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
+| `--e2e` | `true` | Include the Playwright end-to-end tests (`--e2e=false` removes them, their make targets and dependency) |
+| `--live-reload` | `templ` | What `make dev` runs: `templ` (templ's proxy) or `air`; both reload the browser on port 7331 |
 | `--js` | `true` | Download htmx, Alpine (CSP) and hx-optimistic, record versions and SHA-384 hashes in the README, and commit them |
-| `--axe` | `true` | Download axe-core (sha512-verified, from the npm registry) for the accessibility test |
+| `--axe` | `true` | Download axe-core (sha512-verified, from the npm registry) for the accessibility test; off without `--e2e` |
 | `--git` | `true` | `git init` and a first commit (skipped inside an existing repository or a non-empty directory) |
 | `--setup` | `true` | Run `make setup` (Go modules, JS libraries, Chromium for the E2E tests, a first build) |
 | `--yes`, `-y` | | Ask nothing: flags, then defaults (for CI and AI agents) |
@@ -44,7 +46,10 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-More choices (auth, tests, Docker, CI) are coming; see `SPEC.md`.
+More choices (auth, Docker, CI) are coming; see `SPEC.md`.
+
+Every project gets a fixed `air.toml` (gotth-plus's runs no `templ generate`, and `make air` didn't
+pass `-c air.toml`, so air ignored it) with air's browser-reloading proxy on port 7331.
 
 ### Databases
 
