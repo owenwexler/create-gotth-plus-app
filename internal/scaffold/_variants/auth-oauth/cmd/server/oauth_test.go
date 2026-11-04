@@ -38,6 +38,9 @@ var oauthProviders = []string{
 	// cgpa:if apple
 	"apple",
 	// cgpa:end
+	// cgpa:if oidc
+	"oidc",
+	// cgpa:end
 }
 
 const testClientID = "test-client-id"
@@ -81,6 +84,11 @@ func newOAuthApp(t *testing.T) *oauthApp {
 	}
 	a.fakes["apple"].appleKey = &key.PublicKey
 	env.AppleClientID, env.AppleTeamID, env.AppleKeyID, env.ApplePrivateKeyFile = testClientID, "TEAM123", "KEY123", keyFile
+	// cgpa:end
+
+	// cgpa:if oidc
+	// generic OIDC finds everything through the issuer's discovery document
+	env.OIDCIssuerURL, env.OIDCClientID, env.OIDCClientSecret, env.OIDCLabel = a.fakes["oidc"].srv.URL, testClientID, "test-secret", "Example SSO"
 	// cgpa:end
 
 	_, a.db = newTestApp(t, env)
@@ -472,6 +480,53 @@ func TestOnlyTheAppleCallbackSkipsCSRF(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("cross-site POST %s without a CSRF token: %d, want 403", path, rec.Code)
 		}
+	}
+}
+
+// cgpa:end
+// cgpa:if oidc
+func TestOIDCSignOutEndsTheProviderSession(t *testing.T) {
+	a := newOAuthApp(t)
+	v := newVisitor(t, a.handler)
+	if rec := signInWith(t, a, v, "oidc", "subject-1", "ann@example.com", true); rec.Code != http.StatusSeeOther {
+		t.Fatalf("callback: %d %s", rec.Code, rec.Body)
+	}
+	rec := v.post("/logout", nil)
+	to, err := url.Parse(rec.Header().Get("HX-Redirect"))
+	if err != nil || to.Host != strings.TrimPrefix(a.fakes["oidc"].srv.URL, "http://") || to.Path != "/logout" {
+		t.Fatalf("sign-out went to %q, want the provider's end_session_endpoint", rec.Header().Get("HX-Redirect"))
+	}
+	if q := to.Query(); q.Get("client_id") != testClientID || q.Get("post_logout_redirect_uri") != "http://app.example/" {
+		t.Errorf("logout URL %s", to)
+	}
+	if rec := v.get("/account"); rec.Code != http.StatusSeeOther {
+		t.Errorf("still signed in here: %d", rec.Code)
+	}
+}
+
+func TestOIDCRefusesAnotherIssuer(t *testing.T) {
+	a := newOAuthApp(t)
+	a.fakes["oidc"].discoveryIssuer = "https://evil.example"
+	if rec := newVisitor(t, a.handler).get("/auth/oidc/login"); rec.Code != http.StatusInternalServerError {
+		t.Errorf("discovery with another issuer: %d", rec.Code)
+	}
+}
+
+func TestOIDCStartsWhileTheProviderIsDown(t *testing.T) {
+	a := newOAuthApp(t)
+	f := a.fakes["oidc"]
+	f.mu.Lock()
+	f.discoveryDown = true
+	f.mu.Unlock()
+	v := newVisitor(t, a.handler)
+	if rec := v.get("/auth/oidc/login"); rec.Code != http.StatusInternalServerError {
+		t.Fatalf("sign-in while the provider is down: %d", rec.Code)
+	}
+	f.mu.Lock()
+	f.discoveryDown = false
+	f.mu.Unlock()
+	if rec := signInWith(t, a, v, "oidc", "subject-1", "ann@example.com", true); rec.Code != http.StatusSeeOther {
+		t.Errorf("sign-in once the provider is back: %d %s", rec.Code, rec.Body)
 	}
 }
 

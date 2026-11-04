@@ -32,7 +32,8 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--module` | `github.com/<git config github.user>/<name>`, or `<name>` | Go module path |
 | `--port` | `3000` | Development port (`.env`) |
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
-| `--auth` | `none` | `none`, or `builtin`: sign-in in the app itself, on server-side sessions |
+| `--auth` | `none` | `none`; `builtin`: sign-in in the app itself; or `oidc`: sign-in at a hosted OpenID Connect provider. Both on server-side sessions |
+| `--oidc-preset` | `other` | With `--auth=oidc`: `workos`, `logto`, `kinde`, `auth0`, `zitadel`, `keycloak` or `other`; fills in the issuer format and setup notes in `.env.example` |
 | `--auth-methods` | `password` | With `--auth=builtin`: any of `password` (argon2id, confirmation and reset emails), `google`, `github`, `apple` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
@@ -50,10 +51,11 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-More sign-in options (OIDC providers such as WorkOS, Logto and Kinde, and Supabase) are coming; see `SPEC.md`.
+Supabase sign-in is coming; see `SPEC.md`.
 
-Google, GitHub and Apple sign-in come with a fake provider in the generated tests, so the whole flow
-(state, nonce, PKCE, account linking, Apple's cross-site POST) is tested without a network.
+Google, GitHub, Apple and OIDC sign-in come with a fake provider in the generated tests, so the whole
+flow (discovery, state, nonce, PKCE, account linking, Apple's cross-site POST, provider logout) is
+tested without a network.
 
 Every project gets a fixed `air.toml` (gotth-plus's runs no `templ generate`, and `make air` didn't
 pass `-c air.toml`, so air ignored it) with air's browser-reloading proxy on port 7331.

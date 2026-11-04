@@ -112,6 +112,12 @@ func newMux(env config.Env, db *gorm.DB, sessions *scs.SessionManager, users rep
 	}
 	oauthHandlers := factory.NewOAuth(authHandlers, providers, service.NewIdentityService(users, repository.NewIdentityRepository(db)))
 	// cgpa:end
+	// cgpa:if oidc
+	// signing out here ends the provider's session too, when it has a logout endpoint
+	if p := providers.Get("oidc"); p != nil {
+		authHandlers.AfterLogout = func(r *http.Request) string { return p.LogoutURL(r.Context(), env.BaseURL+"/") }
+	}
+	// cgpa:end
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticFiles("static")))

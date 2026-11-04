@@ -15,12 +15,14 @@ import (
 func newProviders(env config.Env, endpoints map[string]auth.Endpoints) *auth.Providers {
 	providers := &auth.Providers{}
 	callback := func(name string) string { return env.BaseURL + "/auth/" + name + "/callback" }
+	// cgpa:if google github apple
 	urls := func(name string, standard auth.Endpoints) auth.Endpoints {
 		if e, ok := endpoints[name]; ok {
 			return e
 		}
 		return standard
 	}
+	// cgpa:end
 
 	// cgpa:if google
 	if env.GoogleClientID != "" && env.GoogleClientSecret != "" {
@@ -50,6 +52,13 @@ func newProviders(env config.Env, endpoints map[string]auth.Endpoints) *auth.Pro
 		providers.Add(apple)
 	} else {
 		slog.Warn("Apple sign-in is off: set AppleClientID, AppleTeamID, AppleKeyID and ApplePrivateKeyFile", "return_url", callback("apple"))
+	}
+	// cgpa:end
+	// cgpa:if oidc
+	if env.OIDCIssuerURL != "" && env.OIDCClientID != "" && env.OIDCClientSecret != "" {
+		providers.Add(auth.OIDC(env.OIDCLabel, env.OIDCIssuerURL, env.OIDCClientID, env.OIDCClientSecret, callback("oidc")))
+	} else {
+		slog.Warn("OIDC sign-in is off: set OIDCIssuerURL, OIDCClientID and OIDCClientSecret", "redirect_uri", callback("oidc"))
 	}
 	// cgpa:end
 	return providers

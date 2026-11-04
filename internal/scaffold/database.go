@@ -28,7 +28,7 @@ func DepsKey(o options.Options) string {
 	case o.SQLiteDriver == options.PureGo:
 		key = "sqlite-purego"
 	}
-	if o.Auth == options.BuiltinAuth {
+	if o.HasAuth() {
 		key += "-auth" // scs
 		if o.HasMethod(options.Password) {
 			key += "-password"

@@ -60,6 +60,7 @@ type flags struct {
 	seedAdminKey bool
 	auth         string
 	authMethods  string
+	oidcPreset   string
 	db           string
 	sqliteDriver string
 
@@ -87,6 +88,7 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&f.seedAdminKey, "seed-admin-key", defaults.SeedAdminKey, "write a random SeedAdminKey into .env (--seed-admin-key=false to skip)")
 	fs.StringVar(&f.auth, "auth", string(defaults.Auth), "sign-in: none, or builtin (email and password, server-side sessions)")
 	fs.StringVar(&f.authMethods, "auth-methods", "password", "with --auth=builtin, the sign-in methods: any of password, google, github, apple (comma-separated)")
+	fs.StringVar(&f.oidcPreset, "oidc-preset", string(defaults.OIDCPreset), "with --auth=oidc, the provider: workos, logto, kinde, auth0, zitadel, keycloak or other")
 	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
 	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
 	fs.BoolVar(&f.e2e, "e2e", defaults.E2E, "include the Playwright end-to-end (browser) tests")
@@ -195,6 +197,12 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	}
 	if f.set["auth-methods"] && f.set["auth"] && opts.Auth != options.BuiltinAuth {
 		return errors.New("--auth-methods only applies to --auth=builtin")
+	}
+	if opts.OIDCPreset, err = options.ParseOIDCPreset(f.oidcPreset); err != nil {
+		return err
+	}
+	if f.set["oidc-preset"] && f.set["auth"] && opts.Auth != options.OIDCAuth {
+		return errors.New("--oidc-preset only applies to --auth=oidc")
 	}
 	if opts.Database, err = options.ParseDatabase(f.db); err != nil {
 		return err
@@ -373,7 +381,9 @@ func printNextSteps(w io.Writer, o options.Options, dir string, stepsOK bool) {
 		fmt.Fprintf(w, "  make setup    # Go modules, the JS libraries, the test browser, a first build\n")
 	}
 	fmt.Fprintf(w, "  make dev      # live reload at http://localhost:7331\n")
-	if o.HasOAuth() {
+	if o.Auth == options.OIDCAuth {
+		fmt.Fprintf(w, "  # sign-in: create the client in %s, and put its issuer and keys in .env\n", o.OIDCPreset.Info().Where)
+	} else if o.HasOAuth() {
 		fmt.Fprintf(w, "  # sign-in providers: register an app with each and put its keys in .env (README: \"Sign-in providers\")\n")
 	}
 	if o.HasMethod(options.Password) {

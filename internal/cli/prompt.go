@@ -83,6 +83,7 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			Options(
 				huh.NewOption("None", options.NoAuth),
 				huh.NewOption("Built-in", options.BuiltinAuth),
+				huh.NewOption("OIDC (WorkOS/Logto/Kinde)", options.OIDCAuth),
 			).
 			Value(&o.Auth)))
 	}
@@ -103,6 +104,22 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			}).
 			Value(&o.AuthMethods)).
 			WithHideFunc(func() bool { return o.Auth != options.BuiltinAuth }))
+	}
+	if !given["oidc-preset"] {
+		presetOptions := make([]huh.Option[options.OIDCPreset], len(options.OIDCPresets))
+		for i, p := range options.OIDCPresets {
+			label := p.Label
+			if p.Preset == "other" {
+				label = "Other (any OpenID Connect provider)"
+			}
+			presetOptions[i] = huh.NewOption(label, p.Preset)
+		}
+		groups = append(groups, huh.NewGroup(huh.NewSelect[options.OIDCPreset]().
+			Title("OIDC provider").
+			Description("Users sign in on the provider's page. The app reads its endpoints from discovery; the choice fills in .env.example.").
+			Options(presetOptions...).
+			Value(&o.OIDCPreset)).
+			WithHideFunc(func() bool { return o.Auth != options.OIDCAuth }))
 	}
 	if !given["db"] {
 		dbOptions := make([]huh.Option[options.Database], len(options.Databases))

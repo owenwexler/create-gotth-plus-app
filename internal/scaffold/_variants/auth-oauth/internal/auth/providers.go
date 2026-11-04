@@ -13,17 +13,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	// cgpa:end
+	// cgpa:if github apple oidc
 	"time"
 	// cgpa:end
-	// cgpa:if github
+	// cgpa:if github oidc
 	"context"
-	"io"
 	"net/http"
+	// cgpa:end
+	// cgpa:if github
+	"io"
 	"strconv"
 	// cgpa:end
 	"strings"
 
-	// cgpa:if github
+	// cgpa:if oidc
+	"github.com/coreos/go-oidc/v3/oidc"
+	// cgpa:end
+	// cgpa:if github oidc
 	"golang.org/x/oauth2"
 	// cgpa:end
 )
@@ -200,6 +207,50 @@ func appleClientSecret(cfg AppleConfig, key *ecdsa.PrivateKey, audience string, 
 	r.FillBytes(sig[:32])
 	s.FillBytes(sig[32:])
 	return signingInput + "." + enc.EncodeToString(sig), nil
+}
+
+// cgpa:end
+// cgpa:if oidc
+
+// OIDC signs in with any OpenID Connect provider (WorkOS, Logto, Kinde, Auth0, Zitadel, Keycloak,
+// ...). Everything but the issuer comes from its discovery document, read at the first sign-in;
+// the ID token's issuer must then match issuer exactly.
+func OIDC(label, issuer, clientID, clientSecret, redirectURL string) *Provider {
+	client := &http.Client{Timeout: 15 * time.Second}
+	p := &Provider{
+		Name:  "oidc",
+		Label: label,
+		PKCE:  true,
+		config: &oauth2.Config{
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			RedirectURL:  redirectURL,
+			Scopes:       []string{oidc.ScopeOpenID, "email", "profile"},
+		},
+		issuers:  []string{issuer},
+		identify: identifyOIDC,
+		client:   client,
+	}
+	p.discover = func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(oidc.ClientContext(ctx, client), 15*time.Second)
+		defer cancel()
+		provider, err := oidc.NewProvider(ctx, issuer) // checks that the document's issuer is issuer
+		if err != nil {
+			return err
+		}
+		var meta struct {
+			EndSession string `json:"end_session_endpoint"`
+		}
+		if err := provider.Claims(&meta); err != nil {
+			return err
+		}
+		p.config.Endpoint = provider.Endpoint()
+		// the keys are fetched on first use, with this client, independent of this request
+		p.verifier = provider.VerifierContext(oidc.ClientContext(context.Background(), client), &oidc.Config{ClientID: clientID})
+		p.endSession = meta.EndSession
+		return nil
+	}
+	return p
 }
 
 // cgpa:end

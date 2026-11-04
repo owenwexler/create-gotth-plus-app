@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +36,10 @@ type fakeProvider struct {
 	tokens map[string]fakeGrant
 	// exchanges records the token requests, for checking what the app sent.
 	exchanges []map[string]string
+	// discoveryDown makes the discovery document fail; discoveryIssuer, when set, is the issuer it
+	// claims (to test a mismatch).
+	discoveryDown   bool
+	discoveryIssuer string
 }
 
 // fakeGrant is what the provider knows about a user who approved the sign-in.
@@ -60,6 +65,7 @@ func newFakeProvider(t *testing.T, clientID string) *fakeProvider {
 	mux.HandleFunc("GET /jwks", f.jwks)
 	mux.HandleFunc("GET /user", f.githubUser)
 	mux.HandleFunc("GET /user/emails", f.githubUserEmails)
+	mux.HandleFunc("GET /.well-known/openid-configuration", f.discovery)
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
@@ -100,29 +106,39 @@ func (f *fakeProvider) token(w http.ResponseWriter, r *http.Request) {
 	for k := range r.PostForm {
 		got[k] = r.PostForm.Get(k)
 	}
+	// the client authenticates in the form (client_secret_post) or, by default, with HTTP Basic
+	// (client_secret_basic), whose parts are form-encoded
+	if user, pass, ok := r.BasicAuth(); ok {
+		got["client_id"], _ = url.QueryUnescape(user)
+		got["client_secret"], _ = url.QueryUnescape(pass)
+	}
+
+	fail := func(status int, code, msg string) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "error_description": msg})
+	}
+	// like a real provider, a client that fails to authenticate doesn't use up the code
+	if got["client_id"] != f.clientID {
+		fail(http.StatusUnauthorized, "invalid_client", "wrong client_id")
+		return
+	}
+
 	f.mu.Lock()
 	f.exchanges = append(f.exchanges, got)
 	g, ok := f.codes[got["code"]]
 	delete(f.codes, got["code"]) // single use
 	f.mu.Unlock()
 
-	fail := func(msg string) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant", "error_description": msg})
-	}
 	switch {
 	case !ok:
-		fail("unknown or used code")
-		return
-	case got["client_id"] != f.clientID:
-		fail("wrong client_id")
+		fail(http.StatusBadRequest, "invalid_grant", "unknown or used code")
 		return
 	case g.challenge != "" && s256(got["code_verifier"]) != g.challenge:
-		fail("PKCE verifier does not match the challenge")
+		fail(http.StatusBadRequest, "invalid_grant", "PKCE verifier does not match the challenge")
 		return
 	case f.appleKey != nil && !f.validAppleSecret(got["client_secret"]):
-		fail("bad Apple client secret")
+		fail(http.StatusUnauthorized, "invalid_client", "bad Apple client secret")
 		return
 	}
 
@@ -159,6 +175,30 @@ func (f *fakeProvider) idToken(claims map[string]any) string {
 		f.t.Fatal(err)
 	}
 	return input + "." + enc.EncodeToString(sig)
+}
+
+// discovery is the OpenID Connect discovery document (generic OIDC).
+func (f *fakeProvider) discovery(w http.ResponseWriter, _ *http.Request) {
+	f.mu.Lock()
+	down, issuer := f.discoveryDown, f.discoveryIssuer
+	f.mu.Unlock()
+	if down {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if issuer == "" {
+		issuer = f.srv.URL
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"issuer":                                issuer,
+		"authorization_endpoint":                f.srv.URL + "/authorize",
+		"token_endpoint":                        f.srv.URL + "/token",
+		"jwks_uri":                              f.srv.URL + "/jwks",
+		"end_session_endpoint":                  f.srv.URL + "/logout",
+		"response_types_supported":              []string{"code"},
+		"id_token_signing_alg_values_supported": []string{"RS256"},
+	})
 }
 
 func (f *fakeProvider) jwks(w http.ResponseWriter, _ *http.Request) {

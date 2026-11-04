@@ -28,6 +28,7 @@ func authConditions(o options.Options) map[string]bool {
 		"google":   o.HasMethod(options.Google),
 		"github":   o.HasMethod(options.GitHub),
 		"apple":    o.HasMethod(options.Apple),
+		"oidc":     o.Auth == options.OIDCAuth,
 		"e2e":      o.E2E,
 	}
 }
@@ -81,7 +82,7 @@ func stripBlocks(src string, conds map[string]bool) (string, error) {
 // for the chosen methods, their settings, and what the docs say about them. It runs before the
 // module is renamed.
 func applyAuth(p Project, o options.Options) error {
-	if o.Auth != options.BuiltinAuth {
+	if !o.HasAuth() {
 		return nil
 	}
 	conds := authConditions(o)
@@ -164,6 +165,18 @@ func authSettings(o options.Options) (fields []setting, env string) {
 			"# file outside the project (it is a secret). Required in production.\n" +
 			"AppleClientID=\nAppleTeamID=\nAppleKeyID=\nApplePrivateKeyFile=\n"
 	}
+	if o.Auth == options.OIDCAuth {
+		preset := o.OIDCPreset.Info()
+		fields = append(fields, setting{"OIDCIssuerURL", "OpenID Connect sign-in (" + preset.Label + "): the issuer URL, client ID and secret. Required in\n// production; in development, sign-in is off while they are empty."},
+			setting{"OIDCClientID", ""}, setting{"OIDCClientSecret", ""},
+			setting{"OIDCLabel", "OIDCLabel is the sign-in button's text after \"Continue with\"."})
+		env += "\n# Sign-in with " + preset.Label + " (OpenID Connect). Create the client in " + preset.Where + ",\n" +
+			"# with <BaseURL>/auth/oidc/callback as its redirect URI and <BaseURL>/ as its post-logout\n" +
+			"# redirect URI. The issuer looks like " + preset.Issuer + "\n" +
+			"# (the app reads the rest from <issuer>/.well-known/openid-configuration). Required in production.\n" +
+			"OIDCIssuerURL=\nOIDCClientID=\nOIDCClientSecret=\n" +
+			"# The button reads \"Continue with <OIDCLabel>\".\nOIDCLabel=" + map[bool]string{true: "single sign-on", false: preset.Label}[preset.Preset == "other"] + "\n"
+	}
 	return fields, env
 }
 
@@ -207,6 +220,10 @@ func authCodeEdits(o options.Options) []edit {
 	if o.HasMethod(options.Apple) {
 		checks += required("Sign in with Apple is on", "AppleClientID", "AppleTeamID", "AppleKeyID", "ApplePrivateKeyFile")
 	}
+	if o.Auth == options.OIDCAuth {
+		checks += required("sign-in uses OpenID Connect", "OIDCIssuerURL", "OIDCClientID", "OIDCClientSecret") +
+			"\tif env.OIDCLabel == \"\" {\n\t\tenv.OIDCLabel = \"single sign-on\"\n\t}\n"
+	}
 
 	return []edit{
 		{"internal/config/config.go",
@@ -238,8 +255,11 @@ func authCodeEdits(o options.Options) []edit {
 func authDocEdits(o options.Options) []edit {
 	password := o.HasMethod(options.Password)
 	var providers []string
+	if o.Auth == options.OIDCAuth {
+		providers = append(providers, o.OIDCPreset.Info().Label+" (OpenID Connect)")
+	}
 	for _, m := range o.AuthMethods {
-		if m != options.Password {
+		if o.Auth == options.BuiltinAuth && m != options.Password {
 			providers = append(providers, m.Label())
 		}
 	}
@@ -381,6 +401,12 @@ func authDocEdits(o options.Options) []edit {
 			"  a new account needs a verified email. Otherwise nobody could take over, or squat, an account by\n" +
 			"  signing in elsewhere with someone else's address.\n" +
 			"- Provider access tokens are used once, to identify the user, and never stored.\n"
+		if o.Auth == options.OIDCAuth {
+			section += "- OpenID Connect reads the provider's endpoints from its discovery document at the first sign-in\n" +
+				"  and requires the ID token's issuer to be exactly `OIDCIssuerURL`. The provider must send\n" +
+				"  `email_verified`; accounts are only made for verified emails. Signing out also ends the session at\n" +
+				"  the provider when its discovery document has an `end_session_endpoint` (some don't, e.g. WorkOS).\n"
+		}
 		if o.HasMethod(options.Apple) {
 			section += "- Apple comes back with a cross-site POST, so `POST /auth/apple/callback` alone is exempt from the\n" +
 				"  CSRF token and cross-origin checks, and its flow cookie is `SameSite=None`. Keep that exemption to\n" +

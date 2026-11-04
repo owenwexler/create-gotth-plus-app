@@ -346,3 +346,22 @@ func TestAuthMethodsFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestOIDCFlag(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "--auth=oidc", "--oidc-preset=workos", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "Auth                 OIDC: WorkOS") || !strings.Contains(out, "create the client in the WorkOS dashboard") {
+		t.Errorf("output:\n%s", out)
+	}
+	for _, args := range [][]string{
+		{"--yes", "--auth=builtin", "--oidc-preset=logto", "app"},
+		{"--yes", "--auth=oidc", "--oidc-preset=okta-ish", "app"},
+	} {
+		if code, _, _ := runCLI(t, t.TempDir(), args...); code != exitError {
+			t.Errorf("%v: exit %d, want an error", args, code)
+		}
+	}
+}

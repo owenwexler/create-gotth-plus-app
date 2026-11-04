@@ -28,6 +28,8 @@ type Options struct {
 	Auth Auth
 	// AuthMethods are the ways to sign in with built-in auth, in AuthMethodList order.
 	AuthMethods []AuthMethod
+	// OIDCPreset fills in the issuer URL format and docs for --auth=oidc.
+	OIDCPreset OIDCPreset
 	// Database is the database the app uses.
 	Database Database
 	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
@@ -89,17 +91,65 @@ type Auth string
 const (
 	// NoAuth: no users or sessions, as gotth-plus ships.
 	NoAuth Auth = "none"
-	// BuiltinAuth: email and password, with server-side sessions, in the app itself.
+	// BuiltinAuth: sign-in in the app itself (password, Google, GitHub, Apple), on server-side sessions.
 	BuiltinAuth Auth = "builtin"
+	// OIDCAuth: sign-in at a hosted OpenID Connect provider (WorkOS, Logto, Kinde, ...), on the same
+	// server-side sessions.
+	OIDCAuth Auth = "oidc"
 )
 
 // ParseAuth reads an --auth value.
 func ParseAuth(s string) (Auth, error) {
 	switch Auth(s) {
-	case NoAuth, BuiltinAuth:
+	case NoAuth, BuiltinAuth, OIDCAuth:
 		return Auth(s), nil
 	}
-	return "", fmt.Errorf("unknown auth %q; use none or builtin", s)
+	return "", fmt.Errorf("unknown auth %q; use none, builtin or oidc", s)
+}
+
+// OIDCPreset is a known OpenID Connect provider, or Other.
+type OIDCPreset string
+
+// OIDCPresetInfo describes a preset for .env.example and the docs.
+type OIDCPresetInfo struct {
+	Preset OIDCPreset
+	Label  string
+	// Issuer is the issuer URL's format, with <placeholders>.
+	Issuer string
+	// Where is where to create the client and find the issuer.
+	Where string
+}
+
+// OIDCPresets lists the presets in the order they are offered. The issuer formats are hints for
+// .env.example: the app reads everything else from the issuer's discovery document.
+var OIDCPresets = []OIDCPresetInfo{
+	{"workos", "WorkOS", "https://<your-subdomain>.authkit.app", "the WorkOS dashboard: an OAuth application under Connect; the issuer is your AuthKit domain"},
+	{"logto", "Logto", "https://<tenant-id>.logto.app/oidc", "Logto Console: a Traditional web application; the issuer is the tenant endpoint plus /oidc"},
+	{"kinde", "Kinde", "https://<your-business>.kinde.com", "Kinde: a back-end web application; the issuer is your Kinde domain"},
+	{"auth0", "Auth0", "https://<tenant>.<region>.auth0.com/", "Auth0: a Regular Web Application; the issuer is the tenant domain with a trailing slash"},
+	{"zitadel", "Zitadel", "https://<instance>.zitadel.cloud", "Zitadel Console: a web application with code flow; the issuer is the instance domain"},
+	{"keycloak", "Keycloak", "https://<host>/realms/<realm>", "Keycloak: a confidential OpenID Connect client in the realm; the issuer is the realm URL"},
+	{"other", "your provider", "https://issuer.example.com", "your provider: any OpenID Connect provider with discovery (/.well-known/openid-configuration)"},
+}
+
+// ParseOIDCPreset reads an --oidc-preset value.
+func ParseOIDCPreset(s string) (OIDCPreset, error) {
+	for _, p := range OIDCPresets {
+		if string(p.Preset) == s {
+			return p.Preset, nil
+		}
+	}
+	return "", fmt.Errorf("unknown OIDC preset %q; use workos, logto, kinde, auth0, zitadel, keycloak or other", s)
+}
+
+// Info returns the preset's description.
+func (p OIDCPreset) Info() OIDCPresetInfo {
+	for _, info := range OIDCPresets {
+		if info.Preset == p {
+			return info
+		}
+	}
+	return OIDCPresets[len(OIDCPresets)-1]
 }
 
 // AuthMethod is one way to sign in with built-in auth.
@@ -160,6 +210,9 @@ func ParseAuthMethods(s string) ([]AuthMethod, error) {
 	return methods, nil
 }
 
+// HasAuth reports whether the project has sign-in at all.
+func (o Options) HasAuth() bool { return o.Auth == BuiltinAuth || o.Auth == OIDCAuth }
+
 // HasMethod reports whether built-in auth signs in with m.
 func (o Options) HasMethod(m AuthMethod) bool {
 	if o.Auth != BuiltinAuth {
@@ -173,13 +226,16 @@ func (o Options) HasMethod(m AuthMethod) bool {
 	return false
 }
 
-// HasOAuth reports whether any sign-in provider (Google, GitHub, Apple) is chosen.
+// HasOAuth reports whether any sign-in provider is chosen (Google, GitHub, Apple, or OIDC).
 func (o Options) HasOAuth() bool {
-	return o.HasMethod(Google) || o.HasMethod(GitHub) || o.HasMethod(Apple)
+	return o.Auth == OIDCAuth || o.HasMethod(Google) || o.HasMethod(GitHub) || o.HasMethod(Apple)
 }
 
 // AuthLabel describes the auth choice, with its methods.
 func (o Options) AuthLabel() string {
+	if o.Auth == OIDCAuth {
+		return "OIDC: " + o.OIDCPreset.Info().Label
+	}
 	if o.Auth != BuiltinAuth {
 		return "None"
 	}
@@ -245,6 +301,7 @@ func Defaults() Options {
 		SeedAdminKey: true,
 		Auth:         NoAuth,
 		AuthMethods:  []AuthMethod{Password},
+		OIDCPreset:   "other",
 		Database:     SQLite,
 		SQLiteDriver: PureGo,
 		E2E:          true,
@@ -367,6 +424,9 @@ func (o Options) Validate() error {
 		return err
 	}
 	if _, err := ParseAuth(string(o.Auth)); err != nil {
+		return err
+	}
+	if _, err := ParseOIDCPreset(string(o.OIDCPreset)); err != nil {
 		return err
 	}
 	if o.Auth == BuiltinAuth {

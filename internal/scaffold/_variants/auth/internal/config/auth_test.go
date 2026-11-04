@@ -31,6 +31,11 @@ func TestProductionNeedsSignInSettings(t *testing.T) {
 		"AppleKeyID":          "KEY123",
 		"ApplePrivateKeyFile": "/run/secrets/AuthKey.p8",
 		// cgpa:end
+		// cgpa:if oidc
+		"OIDCIssuerURL":    "https://example.authkit.app",
+		"OIDCClientID":     "id",
+		"OIDCClientSecret": "secret",
+		// cgpa:end
 	}
 	set := func(t *testing.T, env map[string]string) {
 		for k, v := range env {

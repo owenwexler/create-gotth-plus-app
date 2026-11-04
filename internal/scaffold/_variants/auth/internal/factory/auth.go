@@ -23,6 +23,9 @@ type Auth struct {
 	Secure bool
 	// Login says what the sign-in page offers (the password form, provider buttons).
 	Login view.LoginOptions
+	// AfterLogout, when set, says where to send the browser after signing out, e.g. to the sign-in
+	// provider's logout page so its session ends too. "" means the home page.
+	AfterLogout func(r *http.Request) string
 }
 
 func normalizeEmail(s string) string {
@@ -91,7 +94,13 @@ func (a *Auth) Logout() http.HandlerFunc {
 			a.internalError(w, r, "rotate csrf token", err)
 			return
 		}
-		redirect(w, r, "/")
+		to := "/"
+		if a.AfterLogout != nil {
+			if u := a.AfterLogout(r); u != "" {
+				to = u
+			}
+		}
+		redirect(w, r, to)
 	}
 }
 

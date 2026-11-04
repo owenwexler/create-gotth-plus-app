@@ -216,3 +216,33 @@ func TestBuildOAuth(t *testing.T) {
 		t.Error("the CSRF exemption is there without Apple")
 	}
 }
+
+func TestBuildOIDC(t *testing.T) {
+	o := testOptions()
+	o.Auth, o.OIDCPreset = options.OIDCAuth, "logto"
+	p := mustBuild(t, o, "/work/demo-app")
+	mustContain(t, p, "internal/auth/providers.go", "func OIDC(")
+	mustContain(t, p, "internal/app/providers.go", "auth.OIDC(env.OIDCLabel")
+	mustContain(t, p, "internal/app/app.go", "authHandlers.AfterLogout")
+	mustContain(t, p, ".env.example", "https://<tenant-id>.logto.app/oidc")
+	mustContain(t, p, ".env.example", "\nOIDCLabel=Logto\n")
+	mustContain(t, p, "internal/config/config.go", "OIDCIssuerURL, OIDCClientID, OIDCClientSecret must be set in production")
+	mustContain(t, p, "SECURITY.md", "requires the ID token's issuer to be exactly `OIDCIssuerURL`")
+	mustContain(t, p, "go.mod", "github.com/coreos/go-oidc/v3 ")
+	for _, f := range []string{"internal/auth/password.go", "internal/mail/mail.go"} {
+		if _, ok := p[f]; ok {
+			t.Errorf("%s is there with OIDC sign-in", f)
+		}
+	}
+	for _, w := range []string{"GoogleEndpoints", "GitHubEndpoints", "AppleEndpoints"} {
+		if strings.Contains(string(p["internal/auth/providers.go"]), w) {
+			t.Errorf("%s is there with OIDC sign-in", w)
+		}
+	}
+	if DepsKey(o) != "sqlite-purego-auth-oauth" {
+		t.Errorf("DepsKey = %q", DepsKey(o))
+	}
+
+	o.OIDCPreset = "other"
+	mustContain(t, mustBuild(t, o, "/work/demo-app"), ".env.example", "\nOIDCLabel=single sign-on\n")
+}

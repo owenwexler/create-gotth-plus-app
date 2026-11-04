@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -55,6 +57,50 @@ type Provider struct {
 	identify func(ctx context.Context, p *Provider, token *oauth2.Token, nonce string) (Identity, error)
 	apiURL   string
 	client   *http.Client
+
+	// discover, when set, fills in the endpoints from the issuer's discovery document the first time
+	// they are needed (generic OIDC), so the app starts even while the provider is unreachable.
+	discover   func(ctx context.Context) error
+	discoverMu sync.Mutex
+	discovered bool
+	// endSession is the provider's logout endpoint, from discovery, or "".
+	endSession string
+}
+
+// ready runs discovery once it has succeeded; until then, every sign-in tries again.
+func (p *Provider) ready(ctx context.Context) error {
+	if p.discover == nil {
+		return nil
+	}
+	p.discoverMu.Lock()
+	defer p.discoverMu.Unlock()
+	if p.discovered {
+		return nil
+	}
+	if err := p.discover(ctx); err != nil {
+		return fmt.Errorf("discover %s: %w", p.Name, err)
+	}
+	p.discovered = true
+	return nil
+}
+
+// LogoutURL is where to send the browser so the provider ends its own session too, coming back to
+// afterLogout; "" when the provider has no logout endpoint (or isn't reachable).
+func (p *Provider) LogoutURL(ctx context.Context, afterLogout string) string {
+	if p.ready(ctx) != nil || p.endSession == "" {
+		return ""
+	}
+	u, err := url.Parse(p.endSession)
+	if err != nil {
+		return ""
+	}
+	q := u.Query()
+	// without the ID token (it isn't kept), client_id says which app this is (OpenID Connect
+	// RP-Initiated Logout); the provider only accepts post_logout_redirect_uri values registered for it
+	q.Set("client_id", p.config.ClientID)
+	q.Set("post_logout_redirect_uri", afterLogout)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // Providers are the configured sign-in providers, in the order the sign-in page shows them.
@@ -136,6 +182,9 @@ func randomString() (string, error) {
 // Begin sends the browser to the provider. next is where to go after signing in (checked again with
 // SafeNext when it is used).
 func (p *Provider) Begin(w http.ResponseWriter, r *http.Request, secure bool, next string) error {
+	if err := p.ready(r.Context()); err != nil {
+		return err
+	}
 	f := flow{Provider: p.Name, Next: SafeNext(next, "")}
 	var err error
 	if f.State, err = randomString(); err != nil {
@@ -202,6 +251,9 @@ func (p *Provider) Finish(w http.ResponseWriter, r *http.Request, secure bool) (
 		return Identity{}, "", fmt.Errorf("%w: no code", ErrSignInFailed)
 	}
 
+	if err := p.ready(r.Context()); err != nil {
+		return Identity{}, "", err
+	}
 	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, p.client)
 	config := *p.config
 	if p.clientSecret != nil {
