@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@config "../tailwind.config.js";
+
+@source "../internal/view/*.templ";
+@source "../internal/styles/*.go";
+
+/* To self-host a font, put the woff2 in /static/font, then:
+   1. Define the font face
+@font-face {
+  font-family: 'Your Font';
+  src: url('/static/font/your-font.woff2') format('woff2');
+  font-display: swap;
+}
+   2. Register it with the Tailwind v4 theme
+@theme {
+  --font-sans: "Your Font", sans-serif;
+}
+*/
+
+/* Alpine hides x-cloak elements until it has initialised them */
+[x-cloak] {
+  display: none !important;
+}
+
+/* htmx's own indicator styles are an injected <style>, which the CSP forbids (includeIndicatorStyles is off) */
+.htmx-indicator {
+  opacity: 0;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+  transition: opacity 200ms ease-in;
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "e49c8be7-4789-40df-a7de-5ce16480d415",
+    "name": "Go"
+  },
+  {
+    "id": "467be3bc-0e5a-4cc2-b2f6-53e7f5332176",
+    "name": "Templ"
+  },
+  {
+    "id": "0d0f3c2e-6a59-4a51-9b1c-3f0f3a3b8a11",
+    "name": "Tailwind"
+  },
+  {
+    "id": "7b1f6a0c-2c64-4d0b-8a7e-5b9a4c1d2e33",
+    "name": "HTMX"
+  }
+]
