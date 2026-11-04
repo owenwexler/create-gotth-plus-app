@@ -31,6 +31,10 @@ func TestProductionNeedsSignInSettings(t *testing.T) {
 		"AppleKeyID":          "KEY123",
 		"ApplePrivateKeyFile": "/run/secrets/AuthKey.p8",
 		// cgpa:end
+		// cgpa:if supabase
+		"SupabaseURL":            "https://abc.supabase.co",
+		"SupabasePublishableKey": "sb_publishable_test",
+		// cgpa:end
 		// cgpa:if oidc
 		"OIDCIssuerURL":    "https://example.authkit.app",
 		"OIDCClientID":     "id",

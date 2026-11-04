@@ -198,6 +198,12 @@ func TestGeneratedProjectBuilds(t *testing.T) {
 	t.Run("sqlite-purego-oidc", func(t *testing.T) {
 		testGeneratedProject(t, options.SQLite, options.PureGo, "", true, options.OIDCAuth)
 	})
+	t.Run("postgres-supabase", func(t *testing.T) {
+		testGeneratedProject(t, options.Postgres, options.PureGo, "CGPA_TEST_POSTGRES_URL", true, options.SupabaseAuth)
+	})
+	t.Run("postgres-supabase-noe2e", func(t *testing.T) {
+		testGeneratedProject(t, options.Postgres, options.PureGo, "CGPA_TEST_POSTGRES_URL", false, options.SupabaseAuth)
+	})
 	t.Run("postgres-oidc", func(t *testing.T) {
 		testGeneratedProject(t, options.Postgres, options.PureGo, "CGPA_TEST_POSTGRES_URL", true, options.OIDCAuth)
 	})

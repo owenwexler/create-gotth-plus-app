@@ -29,6 +29,7 @@ func authConditions(o options.Options) map[string]bool {
 		"github":   o.HasMethod(options.GitHub),
 		"apple":    o.HasMethod(options.Apple),
 		"oidc":     o.Auth == options.OIDCAuth,
+		"supabase": o.Auth == options.SupabaseAuth,
 		"e2e":      o.E2E,
 	}
 }
@@ -90,8 +91,14 @@ func applyAuth(p Project, o options.Options) error {
 	if conds["password"] {
 		variants = append(variants, "auth-password")
 	}
+	if conds["oauth"] || conds["supabase"] {
+		variants = append(variants, "auth-identity")
+	}
 	if conds["oauth"] {
 		variants = append(variants, "auth-oauth")
+	}
+	if conds["supabase"] {
+		variants = append(variants, "auth-supabase")
 	}
 	for _, v := range variants {
 		written, err := p.overlay(v)
@@ -177,6 +184,18 @@ func authSettings(o options.Options) (fields []setting, env string) {
 			"OIDCIssuerURL=\nOIDCClientID=\nOIDCClientSecret=\n" +
 			"# The button reads \"Continue with <OIDCLabel>\".\nOIDCLabel=" + map[bool]string{true: "single sign-on", false: preset.Label}[preset.Preset == "other"] + "\n"
 	}
+	if o.Auth == options.SupabaseAuth {
+		fields = append(fields, setting{"SupabaseURL", "Supabase Auth: the project URL and its publishable (anon) key, from Project Settings > API.\n// Required in production."},
+			setting{"SupabasePublishableKey", ""},
+			setting{"SupabaseProviders", "SupabaseProviders lists the providers enabled in Supabase that get a \"Continue with\" button,\n// e.g. google,github. Empty: email and password only."})
+		env += "\n# Supabase Auth: Project Settings > API (the project URL and the publishable/anon key, never the\n" +
+			"# secret/service_role key). In Authentication > URL Configuration, set the Site URL to <BaseURL>\n" +
+			"# and allow <BaseURL>/auth/supabase/callback and <BaseURL>/reset-password as redirect URLs.\n" +
+			"# DatabaseURL is the project's Postgres (Connect > Session pooler), with sslmode=require. Required\n" +
+			"# in production.\n" +
+			"SupabaseURL=\nSupabasePublishableKey=\n" +
+			"# Providers enabled in Authentication > Providers that get a button, e.g. google,github\nSupabaseProviders=\n"
+	}
 	return fields, env
 }
 
@@ -219,6 +238,9 @@ func authCodeEdits(o options.Options) []edit {
 	}
 	if o.HasMethod(options.Apple) {
 		checks += required("Sign in with Apple is on", "AppleClientID", "AppleTeamID", "AppleKeyID", "ApplePrivateKeyFile")
+	}
+	if o.Auth == options.SupabaseAuth {
+		checks += required("sign-in uses Supabase Auth", "SupabaseURL", "SupabasePublishableKey")
 	}
 	if o.Auth == options.OIDCAuth {
 		checks += required("sign-in uses OpenID Connect", "OIDCIssuerURL", "OIDCClientID", "OIDCClientSecret") +
@@ -266,9 +288,13 @@ func authDocEdits(o options.Options) []edit {
 	oauth := len(providers) > 0
 	providerList := strings.Join(providers, ", ")
 
+	supabase := o.Auth == options.SupabaseAuth
 	var methods []string
 	if password {
 		methods = append(methods, "an email and a password")
+	}
+	if supabase {
+		methods = append(methods, "Supabase Auth (an email and a password, or the providers enabled in Supabase)")
 	}
 	if oauth {
 		methods = append(methods, providerList)
@@ -283,7 +309,17 @@ func authDocEdits(o options.Options) []edit {
 	if oauth {
 		what = append(what, providerList+" (OAuth with state, nonce and PKCE)")
 	}
+	if supabase {
+		what = append(what, "Supabase Auth (email and password, and Supabase's providers, through its PKCE flow)")
+	}
 	routes := "| GET | `/login` | Sign in |\n"
+	if supabase {
+		routes += "| POST | `/login` | Sign in with email and password (checked by Supabase) |\n" +
+			"| GET, POST | `/signup` | Create an account (Supabase emails a confirmation link) |\n" +
+			"| GET, POST | `/forgot-password` | Ask Supabase for a reset link |\n" +
+			"| GET, POST | `/reset-password` | Where the reset link comes back; set the new password |\n" +
+			"| GET | `/auth/{provider}/login`, `/auth/supabase/callback` | Sign in with a provider through Supabase, and Supabase's return |\n"
+	}
 	if password {
 		routes += "| POST | `/login` | Sign in with email and password |\n" +
 			"| GET, POST | `/signup` | Create an account (emails a confirmation link) |\n" +
@@ -348,6 +384,9 @@ func authDocEdits(o options.Options) []edit {
 			authNote += "Apple's callback is a cross-site POST, so `POST /auth/apple/callback` alone skips the CSRF and cross-origin checks (`buildHandler`); its state and nonce protect it. "
 		}
 	}
+	if supabase {
+		authNote += "Supabase Auth: `internal/auth/supabase.go` (its REST API, the PKCE flow cookie) and `internal/factory/supabase.go`; users live in Supabase and are linked by Supabase's user ID through `service.IdentityService`. "
+	}
 	authNote += "Every model is listed in `model.All()` (AutoMigrate in the seed route and the tests)."
 
 	agents := []edit{
@@ -365,6 +404,9 @@ func authDocEdits(o options.Options) []edit {
 	checklist := "- [ ] `BaseURL` is the public `https://` address"
 	if password {
 		checklist += ", and SMTP is configured (`SMTPHost`, `MailFrom`)"
+	}
+	if supabase {
+		checklist += "; `SupabaseURL` and the publishable key are set (never the secret or\n      service_role key), and Supabase's redirect URLs allow only this app's"
 	}
 	if oauth {
 		checklist += "; each sign-in provider has its keys, and its app at the provider\n      allows only `<BaseURL>/auth/<provider>/callback` as a redirect URL"
@@ -414,13 +456,30 @@ func authDocEdits(o options.Options) []edit {
 				"  out of the repository and the image.\n"
 		}
 	}
+	if supabase {
+		section += "- Users and passwords live in Supabase Auth; the app keeps its own `users` row, linked by Supabase's\n" +
+			"  user ID (`identities`), and its own server-side session. Supabase's tokens are checked by asking\n" +
+			"  Supabase (`GET /auth/v1/user`), used once, and never stored, except the reset-link token, which waits\n" +
+			"  in the server-side session until the new password is set.\n" +
+			"- Every Supabase flow (provider sign-in, the confirmation link, the reset link) uses PKCE: the verifier\n" +
+			"  stays in this browser's `__Host-supabase-flow` cookie, so a code from someone else's sign-in can't\n" +
+			"  sign anyone in here (login CSRF). A reset link only works in the browser that asked for it.\n" +
+			"- Passwords are 15 to 72 characters (NIST's minimum, bcrypt's maximum); set Supabase's own minimum no\n" +
+			"  higher. Sign-in, sign-up and reset are rate-limited per email address as well as per IP.\n" +
+			"- The app only uses the publishable (anon) key. The secret/service_role key bypasses Supabase's\n" +
+			"  row-level security; keep it out of this app's config.\n"
+	}
 	section += "\nWhen you add more:\n"
 
 	limitations := "- No second factor (TOTP or passkeys) yet.\n" +
 		"- Authorisation is yours: `auth.RequireUser` only checks that someone is signed in.\n" +
 		"- The CSRF token is a double-submit cookie, replaced at sign-in and sign-out but not bound to the\n" +
 		"  session, and uses a plain cookie name.\n"
-	if password {
+	if supabase {
+		limitations += "- A user banned or deleted in Supabase stays signed in to the app until their session ends (at most\n" +
+			"  7 days) or you raise their `SessionVersion`.\n"
+	}
+	if password || supabase {
 		limitations += "- Password sign-in doesn't work without JavaScript: the forms rely on htmx sending the CSRF header.\n"
 	}
 

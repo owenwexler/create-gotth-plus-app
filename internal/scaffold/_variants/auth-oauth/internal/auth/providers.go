@@ -25,7 +25,9 @@ import (
 	"io"
 	"strconv"
 	// cgpa:end
+	// cgpa:if google github
 	"strings"
+	// cgpa:end
 
 	// cgpa:if oidc
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -34,11 +36,6 @@ import (
 	"golang.org/x/oauth2"
 	// cgpa:end
 )
-
-// normalize lowercases and trims an email address.
-func normalize(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
 
 // cgpa:if google
 // GoogleEndpoints are Google's OpenID Connect URLs.

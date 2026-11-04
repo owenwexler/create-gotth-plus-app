@@ -96,15 +96,18 @@ const (
 	// OIDCAuth: sign-in at a hosted OpenID Connect provider (WorkOS, Logto, Kinde, ...), on the same
 	// server-side sessions.
 	OIDCAuth Auth = "oidc"
+	// SupabaseAuth: sign-in through Supabase Auth (email and password, and its providers); users live
+	// in Supabase, the app keeps its own server-side sessions. The database is Supabase's Postgres.
+	SupabaseAuth Auth = "supabase"
 )
 
 // ParseAuth reads an --auth value.
 func ParseAuth(s string) (Auth, error) {
 	switch Auth(s) {
-	case NoAuth, BuiltinAuth, OIDCAuth:
+	case NoAuth, BuiltinAuth, OIDCAuth, SupabaseAuth:
 		return Auth(s), nil
 	}
-	return "", fmt.Errorf("unknown auth %q; use none, builtin or oidc", s)
+	return "", fmt.Errorf("unknown auth %q; use none, builtin, oidc or supabase", s)
 }
 
 // OIDCPreset is a known OpenID Connect provider, or Other.
@@ -211,7 +214,7 @@ func ParseAuthMethods(s string) ([]AuthMethod, error) {
 }
 
 // HasAuth reports whether the project has sign-in at all.
-func (o Options) HasAuth() bool { return o.Auth == BuiltinAuth || o.Auth == OIDCAuth }
+func (o Options) HasAuth() bool { return o.Auth != NoAuth && o.Auth != "" }
 
 // HasMethod reports whether built-in auth signs in with m.
 func (o Options) HasMethod(m AuthMethod) bool {
@@ -235,6 +238,9 @@ func (o Options) HasOAuth() bool {
 func (o Options) AuthLabel() string {
 	if o.Auth == OIDCAuth {
 		return "OIDC: " + o.OIDCPreset.Info().Label
+	}
+	if o.Auth == SupabaseAuth {
+		return "Supabase Auth"
 	}
 	if o.Auth != BuiltinAuth {
 		return "None"
@@ -428,6 +434,9 @@ func (o Options) Validate() error {
 	}
 	if _, err := ParseOIDCPreset(string(o.OIDCPreset)); err != nil {
 		return err
+	}
+	if o.Auth == SupabaseAuth && o.Database != Postgres {
+		return errors.New("Supabase sign-in uses Supabase's Postgres: use --db=postgres (or leave --db out)")
 	}
 	if o.Auth == BuiltinAuth {
 		names := make([]string, len(o.AuthMethods))

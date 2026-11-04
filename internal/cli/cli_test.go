@@ -365,3 +365,17 @@ func TestOIDCFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestSupabaseFlag(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "--auth=supabase", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "Auth                 Supabase Auth") || !strings.Contains(out, "Database             Postgres") {
+		t.Errorf("output:\n%s", out)
+	}
+	if code, _, errOut := runCLI(t, t.TempDir(), "--yes", "--auth=supabase", "--db=sqlite", "app"); code != exitError || !strings.Contains(errOut, "Supabase's Postgres") {
+		t.Errorf("--db=sqlite with Supabase: exit %d, %q", code, errOut)
+	}
+}

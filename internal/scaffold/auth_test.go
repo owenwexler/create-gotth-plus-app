@@ -246,3 +246,34 @@ func TestBuildOIDC(t *testing.T) {
 	o.OIDCPreset = "other"
 	mustContain(t, mustBuild(t, o, "/work/demo-app"), ".env.example", "\nOIDCLabel=single sign-on\n")
 }
+
+func TestBuildSupabase(t *testing.T) {
+	o := testOptions()
+	o.Auth, o.Database = options.SupabaseAuth, options.Postgres
+	p := mustBuild(t, o, "/work/demo-app")
+	for _, f := range []string{"internal/auth/supabase.go", "internal/factory/supabase.go", "internal/app/supabase.go", "internal/service/identity.go", "cmd/server/supabase_test.go"} {
+		if _, ok := p[f]; !ok {
+			t.Errorf("%s is missing", f)
+		}
+	}
+	for _, f := range []string{"internal/auth/password.go", "internal/auth/oauth.go", "internal/mail/mail.go", "cmd/server/oauth_test.go"} {
+		if _, ok := p[f]; ok {
+			t.Errorf("%s is there with Supabase sign-in", f)
+		}
+	}
+	mustContain(t, p, ".env.example", "\nSupabaseURL=\nSupabasePublishableKey=\n")
+	mustContain(t, p, "internal/config/config.go", "SupabaseURL, SupabasePublishableKey must be set in production")
+	mustContain(t, p, "SECURITY.md", "never the secret or\n      service_role key")
+	mustContain(t, p, "README.md", "`/auth/supabase/callback`")
+	if strings.Contains(string(p["go.mod"]), "go-oidc") || strings.Contains(string(p["go.mod"]), "x/oauth2") {
+		t.Error("go.mod has OAuth libraries Supabase sign-in doesn't use")
+	}
+	if DepsKey(o) != "postgres-auth-supabase" {
+		t.Errorf("DepsKey = %q", DepsKey(o))
+	}
+
+	o.Database = options.SQLite
+	if err := o.Validate(); err == nil {
+		t.Error("Supabase on SQLite validated")
+	}
+}

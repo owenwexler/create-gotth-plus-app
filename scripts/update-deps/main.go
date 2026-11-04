@@ -96,6 +96,9 @@ func run() error {
 		if o.HasOAuth() {
 			mods = append(mods, oauthModules...)
 		}
+		if o.Auth == options.SupabaseAuth {
+			mods = append(mods, "github.com/alexedwards/scs/v2@latest")
+		}
 		if len(mods) > 0 {
 			if err := goCmd(dir, append([]string{"get"}, mods...)...); err != nil {
 				return err

@@ -17,16 +17,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Identity is who a sign-in provider says the user is.
-type Identity struct {
-	Provider string
-	// Subject is the provider's stable ID for the user; accounts are matched on (Provider, Subject).
-	Subject string
-	// Email is lowercased. EmailVerified is the provider's word that the user controls it.
-	Email         string
-	EmailVerified bool
-}
-
 // Endpoints are a provider's URLs. Tests point them at a fake provider.
 type Endpoints struct {
 	AuthURL  string

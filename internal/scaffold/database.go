@@ -36,6 +36,9 @@ func DepsKey(o options.Options) string {
 		if o.HasOAuth() {
 			key += "-oauth" // x/oauth2 and go-oidc, whichever providers
 		}
+		if o.Auth == options.SupabaseAuth {
+			key += "-supabase" // only the standard library on top of scs
+		}
 	}
 	if !o.E2E {
 		key += "-noe2e" // no playwright-go
@@ -55,6 +58,14 @@ func DepsChoices() []options.Options {
 		{options.Postgres, options.PureGo},
 		{options.MySQL, options.PureGo},
 	} {
+		if db.db == options.Postgres {
+			// Supabase is always Postgres
+			for _, e2e := range []bool{true, false} {
+				o := options.Defaults()
+				o.Database, o.Auth, o.E2E, o.Axe = options.Postgres, options.SupabaseAuth, e2e, e2e
+				all = append(all, o)
+			}
+		}
 		// no auth, then each set of sign-in methods with its own dependencies
 		authChoices := [][]options.AuthMethod{nil, {options.Password}, {options.Google, options.GitHub, options.Apple}, options.AuthMethodList}
 		for _, methods := range authChoices {

@@ -112,6 +112,13 @@ func newMux(env config.Env, db *gorm.DB, sessions *scs.SessionManager, users rep
 	}
 	oauthHandlers := factory.NewOAuth(authHandlers, providers, service.NewIdentityService(users, repository.NewIdentityRepository(db)))
 	// cgpa:end
+	// cgpa:if supabase
+	authHandlers.Login.Password = true
+	supabaseProviders, buttons := supabaseProviderButtons(env.SupabaseProviders)
+	authHandlers.Login.Providers = append(authHandlers.Login.Providers, buttons...)
+	supabaseHandlers := factory.NewSupabase(authHandlers, auth.NewSupabase(env.SupabaseURL, env.SupabasePublishableKey),
+		service.NewIdentityService(users, repository.NewIdentityRepository(db)), validate, env.BaseURL, supabaseProviders)
+	// cgpa:end
 	// cgpa:if oidc
 	// signing out here ends the provider's session too, when it has a logout endpoint
 	if p := providers.Get("oidc"); p != nil {
@@ -144,6 +151,18 @@ func newMux(env config.Env, db *gorm.DB, sessions *scs.SessionManager, users rep
 	// cgpa:if oauth
 	mux.HandleFunc("GET /auth/{provider}/login", oauthHandlers.Begin())
 	mux.HandleFunc("GET /auth/{provider}/callback", oauthHandlers.Callback())
+	// cgpa:end
+	// cgpa:if supabase
+	// Supabase Auth: users and passwords live in Supabase; the app keeps its own session
+	mux.HandleFunc("POST /login", supabaseHandlers.Login())
+	mux.HandleFunc("GET /signup", supabaseHandlers.SignupPage())
+	mux.HandleFunc("POST /signup", supabaseHandlers.Signup())
+	mux.HandleFunc("GET /forgot-password", supabaseHandlers.ForgotPage())
+	mux.HandleFunc("POST /forgot-password", supabaseHandlers.Forgot())
+	mux.HandleFunc("GET /reset-password", supabaseHandlers.ResetPage())
+	mux.HandleFunc("POST /reset-password", supabaseHandlers.Reset())
+	mux.HandleFunc("GET /auth/{provider}/login", supabaseHandlers.Begin())
+	mux.HandleFunc("GET /auth/supabase/callback", supabaseHandlers.Callback())
 	// cgpa:end
 	// cgpa:if apple
 	// Apple comes back with a cross-site POST (see buildHandler); Callback refuses POST for the others

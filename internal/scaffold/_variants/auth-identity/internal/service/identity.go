@@ -83,3 +83,12 @@ func (s *IdentityService) SignIn(ctx context.Context, id auth.Identity) (model.U
 	}
 	return user, nil
 }
+
+// UserFor returns the user linked to a provider account, or repository.ErrNotFound.
+func (s *IdentityService) UserFor(ctx context.Context, provider, subject string) (model.User, error) {
+	linked, err := s.identities.Get(ctx, provider, subject)
+	if err != nil {
+		return model.User{}, err
+	}
+	return s.users.GetByID(ctx, linked.UserID)
+}

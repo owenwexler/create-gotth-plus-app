@@ -32,7 +32,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--module` | `github.com/<git config github.user>/<name>`, or `<name>` | Go module path |
 | `--port` | `3000` | Development port (`.env`) |
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
-| `--auth` | `none` | `none`; `builtin`: sign-in in the app itself; or `oidc`: sign-in at a hosted OpenID Connect provider. Both on server-side sessions |
+| `--auth` | `none` | `none`; `builtin`: sign-in in the app itself; `oidc`: at a hosted OpenID Connect provider; or `supabase`: through Supabase Auth (email and password, and its providers; the database becomes Postgres). All on the app's own server-side sessions |
 | `--oidc-preset` | `other` | With `--auth=oidc`: `workos`, `logto`, `kinde`, `auth0`, `zitadel`, `keycloak` or `other`; fills in the issuer format and setup notes in `.env.example` |
 | `--auth-methods` | `password` | With `--auth=builtin`: any of `password` (argon2id, confirmation and reset emails), `google`, `github`, `apple` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
@@ -51,9 +51,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-Supabase sign-in is coming; see `SPEC.md`.
-
-Google, GitHub, Apple and OIDC sign-in come with a fake provider in the generated tests, so the whole
+Google, GitHub, Apple, OIDC and Supabase sign-in come with a fake provider in the generated tests, so the whole
 flow (discovery, state, nonce, PKCE, account linking, Apple's cross-site POST, provider logout) is
 tested without a network.
 

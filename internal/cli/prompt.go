@@ -84,6 +84,7 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 				huh.NewOption("None", options.NoAuth),
 				huh.NewOption("Built-in", options.BuiltinAuth),
 				huh.NewOption("OIDC (WorkOS/Logto/Kinde)", options.OIDCAuth),
+				huh.NewOption("Supabase Auth (uses Supabase's Postgres)", options.SupabaseAuth),
 			).
 			Value(&o.Auth)))
 	}
@@ -130,7 +131,8 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			Title("Database").
 			Description("SQLite is a file next to the app. Postgres and MySQL need a server, local or in the cloud, for the app and its tests.").
 			Options(dbOptions...).
-			Value(&o.Database)))
+			Value(&o.Database)).
+			WithHideFunc(func() bool { return o.Auth == options.SupabaseAuth })) // Supabase is Postgres
 	}
 	if !given["sqlite-driver"] {
 		groups = append(groups, huh.NewGroup(huh.NewSelect[options.SQLiteDriver]().
@@ -140,7 +142,7 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 				huh.NewOption("CGO (mattn/go-sqlite3): the C SQLite library, needs a C compiler", options.CGO),
 			).
 			Value(&o.SQLiteDriver)).
-			WithHideFunc(func() bool { return o.Database != options.SQLite }))
+			WithHideFunc(func() bool { return o.Database != options.SQLite || o.Auth == options.SupabaseAuth }))
 	}
 
 	var project []huh.Field

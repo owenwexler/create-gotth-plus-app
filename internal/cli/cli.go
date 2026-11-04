@@ -221,6 +221,12 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 		}
 		opts.Axe = false // axe-core is only used by the E2E tests
 	}
+	if opts.Auth == options.SupabaseAuth {
+		if f.set["db"] && opts.Database != options.Postgres {
+			return errors.New("--auth=supabase uses Supabase's Postgres: leave out --db, or use --db=postgres")
+		}
+		opts.Database = options.Postgres
+	}
 	if f.set["sqlite-driver"] && f.set["db"] && opts.Database != options.SQLite {
 		return errors.New("--sqlite-driver only applies to --db=sqlite")
 	}
@@ -249,6 +255,9 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 		}
 		if !opts.E2E {
 			opts.Axe = false
+		}
+		if opts.Auth == options.SupabaseAuth {
+			opts.Database = options.Postgres
 		}
 	}
 
@@ -381,7 +390,9 @@ func printNextSteps(w io.Writer, o options.Options, dir string, stepsOK bool) {
 		fmt.Fprintf(w, "  make setup    # Go modules, the JS libraries, the test browser, a first build\n")
 	}
 	fmt.Fprintf(w, "  make dev      # live reload at http://localhost:7331\n")
-	if o.Auth == options.OIDCAuth {
+	if o.Auth == options.SupabaseAuth {
+		fmt.Fprintf(w, "  # sign-in: put the Supabase project URL, publishable key and Postgres connection string in .env\n")
+	} else if o.Auth == options.OIDCAuth {
 		fmt.Fprintf(w, "  # sign-in: create the client in %s, and put its issuer and keys in .env\n", o.OIDCPreset.Info().Where)
 	} else if o.HasOAuth() {
 		fmt.Fprintf(w, "  # sign-in providers: register an app with each and put its keys in .env (README: \"Sign-in providers\")\n")
