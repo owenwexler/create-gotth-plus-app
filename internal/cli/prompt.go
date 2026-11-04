@@ -74,6 +74,17 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 		groups = append(groups, huh.NewGroup(fields...))
 	}
 
+	// auth comes before the database: some sign-in providers decide the database (Supabase: Postgres)
+	if !given["auth"] {
+		groups = append(groups, huh.NewGroup(huh.NewSelect[options.Auth]().
+			Title("Sign-in").
+			Description("Built-in: email and password with argon2id, server-side sessions, confirmation and reset emails.").
+			Options(
+				huh.NewOption("None", options.NoAuth),
+				huh.NewOption("Built-in: email and password", options.BuiltinAuth),
+			).
+			Value(&o.Auth)))
+	}
 	if !given["db"] {
 		dbOptions := make([]huh.Option[options.Database], len(options.Databases))
 		for i, d := range options.Databases {

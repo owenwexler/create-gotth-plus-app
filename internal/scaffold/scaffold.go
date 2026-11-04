@@ -136,6 +136,7 @@ func build(fsys fs.FS, opts options.Options, dir string, withDeps bool) (Project
 			return removeE2E(p)
 		}},
 		{"live reload", func() error { return applyLiveReload(p, opts) }},
+		{"auth", func() error { return applyAuth(p, opts) }},
 		{"dependencies", func() error {
 			if !withDeps {
 				return nil
@@ -294,6 +295,14 @@ func setEnv(p Project, opts options.Options) error {
 			return err
 		}
 		env = strings.Replace(env, "\nSeedAdminKey=\n", "\nSeedAdminKey="+key+"\n", 1)
+	}
+	if opts.Auth == options.BuiltinAuth {
+		// the development account's password: 24 random hex characters (at least 15 are required)
+		pw, err := randomHex(12)
+		if err != nil {
+			return err
+		}
+		env = strings.Replace(env, "\nSeedUserPassword=\n", "\nSeedUserPassword="+pw+"\n", 1)
 	}
 	p[".env"] = []byte(env)
 	return nil

@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
+	"github.com/owenwexler/create-gotth-plus-app/internal/options"
 	"github.com/owenwexler/create-gotth-plus-app/internal/scaffold"
 )
 
@@ -26,6 +27,9 @@ var modules = map[string][]string{
 	"postgres":      {"gorm.io/driver/postgres@latest", "github.com/jackc/pgx/v5@latest"},
 	"mysql":         {"gorm.io/driver/mysql@latest", "github.com/go-sql-driver/mysql@latest"},
 }
+
+// authModules are updated to their latest version when built-in auth is chosen.
+var authModules = []string{"github.com/alexedwards/scs/v2@latest", "golang.org/x/crypto@latest"}
 
 func main() {
 	if err := run(); err != nil {
@@ -74,7 +78,11 @@ func run() error {
 			return err
 		}
 
-		if mods := modules[strings.TrimSuffix(key, "-noe2e")]; len(mods) > 0 {
+		mods := modules[strings.TrimSuffix(strings.TrimSuffix(key, "-noe2e"), "-auth")]
+		if o.Auth == options.BuiltinAuth {
+			mods = append(mods, authModules...)
+		}
+		if len(mods) > 0 {
 			if err := goCmd(dir, append([]string{"get"}, mods...)...); err != nil {
 				return err
 			}

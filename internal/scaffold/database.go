@@ -14,6 +14,9 @@ import (
 var replacedFiles = map[string]string{
 	"internal/database/database.go": "5a9d9edb553e97024c64ae070dea83eb50d3dafdef01be5e86021621c2e62bff",
 	"air.toml":                      "97d30276e3a1e649d03f82c483c8e18478821fbd23a83917dd991ebbf5d23579",
+	"internal/app/app.go":           "df426233cacb86db8fe80499978f38ba38d7f0f690669925b367ea436784d368",
+	"internal/view/pages.templ":     "1cbb98dfb1c14e4717c7fd6f4441ff9fbf42bf22e211fdc816ce1104100ecd56",
+	"internal/view/pages_templ.go":  "7ea89245860b9237cbff19e4500987f16ae9014aff7737c461a32eafd8e83f05",
 }
 
 // DepsKey names the go.mod/go.sum pair in _deps for o: the choices that change the dependencies.
@@ -24,6 +27,9 @@ func DepsKey(o options.Options) string {
 		key = string(o.Database)
 	case o.SQLiteDriver == options.PureGo:
 		key = "sqlite-purego"
+	}
+	if o.Auth == options.BuiltinAuth {
+		key += "-auth" // scs
 	}
 	if !o.E2E {
 		key += "-noe2e" // no playwright-go
@@ -43,11 +49,13 @@ func DepsChoices() []options.Options {
 		{options.Postgres, options.PureGo},
 		{options.MySQL, options.PureGo},
 	} {
-		for _, e2e := range []bool{true, false} {
-			o := options.Defaults()
-			o.Database, o.SQLiteDriver, o.E2E = db.db, db.driver, e2e
-			o.Axe = e2e
-			all = append(all, o)
+		for _, a := range []options.Auth{options.NoAuth, options.BuiltinAuth} {
+			for _, e2e := range []bool{true, false} {
+				o := options.Defaults()
+				o.Database, o.SQLiteDriver, o.E2E, o.Auth = db.db, db.driver, e2e, a
+				o.Axe = e2e
+				all = append(all, o)
+			}
 		}
 	}
 	return all

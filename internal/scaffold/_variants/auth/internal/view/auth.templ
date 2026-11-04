@@ -1,0 +1,184 @@
+package view
+
+import (
+	"github.com/owenwexler/gotth-plus/internal/auth"
+	"github.com/owenwexler/gotth-plus/internal/model"
+	"github.com/owenwexler/gotth-plus/internal/styles"
+)
+
+// Auth forms post with htmx (which sends the CSRF header). method="post" matters even so: without
+// JavaScript a form would otherwise be sent as a GET, with the password in the URL. Without
+// JavaScript the CSRF check rejects the post instead.
+
+// AuthNav is the sign-in link, or the account link, in the corner of the home page.
+templ AuthNav() {
+	<nav aria-label="Account" class="fixed top-4 right-4 z-40 text-sm">
+		if _, ok := auth.CurrentUser(ctx); ok {
+			<a href="/account" class={ styles.GenerateLinkButtonClasses() }>Account</a>
+		} else {
+			<a href="/login" class={ styles.GenerateLinkButtonClasses() }>Sign in</a>
+		}
+	</nav>
+}
+
+templ authPage(title string) {
+	@Layout(title) {
+		<main class="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-5 py-16">
+			<a href="/" class={ styles.GenerateLinkButtonClasses(), "self-start text-sm" }>Home</a>
+			<div class={ styles.GenerateCardClasses() }>
+				<h1 class="text-3xl font-semibold tracking-tight">{ title }</h1>
+				{ children... }
+			</div>
+		</main>
+	}
+}
+
+templ field(id, label, kind, autocomplete, maxlength string) {
+	<div class="flex flex-col gap-1.5">
+		<label for={ id } class="text-sm text-neutral-300">{ label }</label>
+		<input
+			id={ id }
+			name={ id }
+			type={ kind }
+			autocomplete={ autocomplete }
+			maxlength={ maxlength }
+			required
+			class={ styles.GenerateInputClasses() }
+		/>
+	</div>
+}
+
+templ newPasswordField() {
+	<div class="flex flex-col gap-1.5">
+		<label for="password" class="text-sm text-neutral-300">Password</label>
+		<input
+			id="password"
+			name="password"
+			type="password"
+			autocomplete="new-password"
+			minlength="15"
+			maxlength="256"
+			required
+			aria-describedby="password-hint"
+			class={ styles.GenerateInputClasses() }
+		/>
+		<p id="password-hint" class="text-xs text-neutral-400">At least 15 characters. A few unrelated words make a good one.</p>
+	</div>
+}
+
+templ submitButton(text string) {
+	<button type="submit" class={ styles.GenerateBigButtonClasses(), "relative w-full" }>
+		<!-- the label stays in the flow while loading, so the button keeps its size -->
+		<span class="[.htmx-request_&]:invisible">{ text }</span>
+		<span aria-hidden="true" class="htmx-indicator absolute inset-0 flex items-center justify-center">
+			@Spinner(16, 16)
+		</span>
+	</button>
+}
+
+// authForm posts to action and is replaced by the answer (a notice) on success. Errors come back
+// as toasts and leave the form as it is.
+templ authForm(action string) {
+	<form
+		method="post"
+		action={ templ.URL(action) }
+		class="flex flex-col gap-4"
+		hx-post={ action }
+		hx-target="this"
+		hx-swap="outerHTML"
+		hx-disabled-elt="find button"
+		hx-indicator="find button"
+	>
+		{ children... }
+	</form>
+}
+
+// AuthNotice replaces a form once it has done its job.
+templ AuthNotice(title, body, linkHref, linkText string) {
+	<div role="status" class="flex flex-col gap-3">
+		<p class="text-lg font-semibold">{ title }</p>
+		<p class="text-sm leading-relaxed text-neutral-300">{ body }</p>
+		if linkHref != "" {
+			<a href={ templ.URL(linkHref) } class={ styles.GenerateLinkButtonClasses(), "self-start text-sm" }>{ linkText }</a>
+		}
+	</div>
+}
+
+templ LoginPage(next string) {
+	@authPage("Sign in") {
+		@authForm("/login") {
+			<input type="hidden" name="next" value={ next }/>
+			@field("email", "Email", "email", "email", "320")
+			@field("password", "Password", "password", "current-password", "256")
+			@submitButton("Sign in")
+		}
+		<div class="flex flex-col gap-2 text-sm text-neutral-300">
+			<a href="/forgot-password" class={ styles.GenerateLinkButtonClasses(), "self-start" }>Forgot your password?</a>
+			<p>No account yet? <a href="/signup" class={ styles.GenerateLinkButtonClasses() }>Create one</a></p>
+		</div>
+	}
+}
+
+templ SignupPage() {
+	@authPage("Create an account") {
+		@authForm("/signup") {
+			@field("email", "Email", "email", "email", "320")
+			@newPasswordField()
+			@submitButton("Create account")
+		}
+		<p class="text-sm text-neutral-300">Already have an account? <a href="/login" class={ styles.GenerateLinkButtonClasses() }>Sign in</a></p>
+	}
+}
+
+templ ForgotPasswordPage() {
+	@authPage("Reset your password") {
+		<p class="text-sm leading-relaxed text-neutral-300">Enter your email and we'll send you a link to choose a new password.</p>
+		@authForm("/forgot-password") {
+			@field("email", "Email", "email", "email", "320")
+			@submitButton("Send link")
+		}
+	}
+}
+
+// ResetPasswordPage carries the emailed token in a hidden field, so it is only sent in a POST.
+templ ResetPasswordPage(token string) {
+	@authPage("Choose a new password") {
+		@authForm("/reset-password") {
+			<input type="hidden" name="token" value={ token }/>
+			@newPasswordField()
+			@submitButton("Save password")
+		}
+	}
+}
+
+// VerifyEmailPage asks for a click before confirming: the link only opens this page, so a mail
+// scanner that opens links can't use up the token, and nothing changes on a GET.
+templ VerifyEmailPage(token string) {
+	@authPage("Confirm your email") {
+		@authForm("/verify-email") {
+			<input type="hidden" name="token" value={ token }/>
+			@submitButton("Confirm email")
+		}
+	}
+}
+
+// InvalidLinkPage is shown for an emailed link without a usable token.
+templ InvalidLinkPage() {
+	@authPage("This link doesn't work") {
+		<p class="text-sm leading-relaxed text-neutral-300">It may be incomplete. Ask for a new one.</p>
+		<a href="/login" class={ styles.GenerateLinkButtonClasses(), "self-start text-sm" }>Sign in</a>
+	}
+}
+
+templ AccountPage(user model.User) {
+	@authPage("Account") {
+		<dl class="flex flex-col gap-1 text-sm">
+			<dt class="text-neutral-400">Email</dt>
+			<dd class="break-all">{ user.Email }</dd>
+		</dl>
+		<div class="flex flex-col gap-3 sm:flex-row">
+			<button type="button" hx-post="/logout" hx-disabled-elt="this" class={ styles.GenerateBigButtonClasses() }>Sign out</button>
+			<button type="button" hx-post="/logout-everywhere" hx-disabled-elt="this" class={ styles.GenerateBigButtonClasses() }>Sign out everywhere</button>
+		</div>
+	}
+}

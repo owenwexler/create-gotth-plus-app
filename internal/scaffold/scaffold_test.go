@@ -185,19 +185,25 @@ func TestGeneratedProjectBuilds(t *testing.T) {
 			if !e2e {
 				name += "-noe2e"
 			}
-			t.Run(name, func(t *testing.T) { testGeneratedProject(t, c.db, c.driver, c.serverEnv, e2e) })
+			t.Run(name, func(t *testing.T) { testGeneratedProject(t, c.db, c.driver, c.serverEnv, e2e, options.NoAuth) })
 		}
+		// built-in auth on every database, and once without the E2E tests
+		t.Run(c.name+"-auth", func(t *testing.T) { testGeneratedProject(t, c.db, c.driver, c.serverEnv, true, options.BuiltinAuth) })
 	}
+	t.Run("sqlite-purego-auth-noe2e", func(t *testing.T) {
+		testGeneratedProject(t, options.SQLite, options.PureGo, "", false, options.BuiltinAuth)
+	})
 }
 
 // testGeneratedProject generates one project and checks it the way a user would build it.
-func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool) {
+func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool, a options.Auth) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
 	o := testOptions()
 	o.Name = "."
 	o.Database, o.SQLiteDriver = db, driver
 	o.E2E, o.Axe = e2e, e2e
+	o.Auth = a
 	if err := mustBuild(t, o, dir).Write(dir); err != nil {
 		t.Fatal(err)
 	}

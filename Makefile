@@ -1,7 +1,7 @@
 # create-gotth-plus-app - run `make help` for the list of targets.
 
 .DEFAULT_GOAL := help
-.PHONY: help build test test-short vet fmt sync-template try update-deps
+.PHONY: help build test test-short vet fmt sync-template try update-deps gen-templ
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
@@ -29,3 +29,6 @@ try: build ## Generate ./tmp/demo-app with defaults, to look at the output
 
 update-deps: ## Refresh internal/scaffold/pins.go and _deps (go.mod/go.sum per choice); needs network
 	go run ./scripts/update-deps
+
+gen-templ: ## Generate *_templ.go for the .templ files in _variants (templ version from the template go.mod)
+	./scripts/gen-templ.sh

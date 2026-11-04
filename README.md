@@ -32,6 +32,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--module` | `github.com/<git config github.user>/<name>`, or `<name>` | Go module path |
 | `--port` | `3000` | Development port (`.env`) |
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
+| `--auth` | `none` | `none`, or `builtin`: email and password with argon2id, server-side sessions, confirmation and reset emails |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
 | `--e2e` | `true` | Include the Playwright end-to-end tests (`--e2e=false` removes them, their make targets and dependency) |
@@ -48,7 +49,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-Auth is coming next; see `SPEC.md`.
+More sign-in options (Google, GitHub, Apple, OIDC, Supabase) are coming; see `SPEC.md`.
 
 Every project gets a fixed `air.toml` (gotth-plus's runs no `templ generate`, and `make air` didn't
 pass `-c air.toml`, so air ignored it) with air's browser-reloading proxy on port 7331.
@@ -83,6 +84,7 @@ of quietly producing a wrong project.
 make test            # includes generating a project and running go build, vet and test on it
 make try             # generate ./tmp/demo-app to look at
 make sync-template   # pull in the latest committed gotth-plus from ../gotth-plus
+make gen-templ       # regenerate the *_templ.go files in _variants after editing a .templ file there
 make update-deps     # refresh pins.go and _deps; after sync-template, or to update drivers, Tailwind and actions (needs network)
 ```
 

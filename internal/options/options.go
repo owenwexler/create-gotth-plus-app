@@ -24,6 +24,8 @@ type Options struct {
 	Port int
 	// SeedAdminKey writes a random SeedAdminKey into .env, so POST /seed needs it.
 	SeedAdminKey bool
+	// Auth is how people sign in.
+	Auth Auth
 	// Database is the database the app uses.
 	Database Database
 	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
@@ -79,6 +81,33 @@ func (d Database) Label() string {
 // IsServer reports whether the database runs as a separate server (as opposed to a file).
 func (d Database) IsServer() bool { return d == Postgres || d == MySQL }
 
+// Auth is a way to sign in.
+type Auth string
+
+const (
+	// NoAuth: no users or sessions, as gotth-plus ships.
+	NoAuth Auth = "none"
+	// BuiltinAuth: email and password, with server-side sessions, in the app itself.
+	BuiltinAuth Auth = "builtin"
+)
+
+// ParseAuth reads an --auth value.
+func ParseAuth(s string) (Auth, error) {
+	switch Auth(s) {
+	case NoAuth, BuiltinAuth:
+		return Auth(s), nil
+	}
+	return "", fmt.Errorf("unknown auth %q; use none or builtin", s)
+}
+
+// Label is the auth choice's display name.
+func (a Auth) Label() string {
+	if a == BuiltinAuth {
+		return "Built-in: email and password"
+	}
+	return "None"
+}
+
 // LiveReload is a live-reload tool for make dev.
 type LiveReload string
 
@@ -132,6 +161,7 @@ func Defaults() Options {
 	return Options{
 		Port:         3000,
 		SeedAdminKey: true,
+		Auth:         NoAuth,
 		Database:     SQLite,
 		SQLiteDriver: PureGo,
 		E2E:          true,
@@ -251,6 +281,9 @@ func (o Options) Validate() error {
 		return err
 	}
 	if _, err := ParseSQLiteDriver(string(o.SQLiteDriver)); err != nil {
+		return err
+	}
+	if _, err := ParseAuth(string(o.Auth)); err != nil {
 		return err
 	}
 	if _, err := ParseLiveReload(string(o.LiveReload)); err != nil {

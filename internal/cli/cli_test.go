@@ -306,3 +306,20 @@ func TestDockerAndCIFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthFlag(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "--auth=builtin", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "Auth                 Built-in: email and password") || !strings.Contains(out, "dev@example.com") {
+		t.Errorf("output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "app", "internal", "auth", "session.go")); err != nil {
+		t.Error("no auth package")
+	}
+	if code, _, errOut := runCLI(t, t.TempDir(), "--yes", "--auth=clerk", "app"); code != exitError || !strings.Contains(errOut, "unknown auth") {
+		t.Errorf("--auth=clerk: exit %d, %q", code, errOut)
+	}
+}
