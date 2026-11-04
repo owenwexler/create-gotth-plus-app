@@ -122,6 +122,16 @@ var _ = fmt.Sprint("github.com/owenwexler/gotth-plus/internal/b")
 	}
 }
 
+func TestRequirements(t *testing.T) {
+	goVersion, templVersion, err := Requirements(Template())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if goVersion == "" || !strings.HasPrefix(templVersion, "v") {
+		t.Errorf("Requirements = %q, %q", goVersion, templVersion)
+	}
+}
+
 func TestCheckDest(t *testing.T) {
 	dir := t.TempDir()
 	if err := CheckDest(filepath.Join(dir, "missing"), false); err != nil {

@@ -3,13 +3,24 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/owenwexler/create-gotth-plus-app/internal/prereq"
 )
 
-// runCLI runs the CLI in dir with no terminal attached.
+// noTools is a PATH with nothing on it, so tests don't depend on the machine's tools.
+var noTools = prereq.Runner{
+	LookPath: func(string) (string, error) { return "", errors.New("not found") },
+	Output: func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("not found")
+	},
+}
+
+// runCLI runs the CLI in dir with no terminal attached and no tools installed.
 func runCLI(t *testing.T, dir string, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
@@ -18,8 +29,30 @@ func runCLI(t *testing.T, dir string, args ...string) (code int, stdout, stderr 
 		Out:   &out,
 		Err:   &errOut,
 		Getwd: func() (string, error) { return dir, nil },
+		Tools: &noTools,
 	})
 	return code, out.String(), errOut.String()
+}
+
+func TestMissingToolsWarnButStillGenerate(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, want := range []string{"problem  Go: not found", "Install: https://go.dev/dl/", "problem  C compiler", "can still be created"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output is missing %q:\n%s", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "app", "go.mod")); err != nil {
+		t.Error("project not written")
+	}
+
+	_, out, _ = runCLI(t, t.TempDir(), "--yes", "--skip-checks", "app")
+	if strings.Contains(out, "Tools:") {
+		t.Errorf("--skip-checks still checked tools:\n%s", out)
+	}
 }
 
 func TestYesGeneratesProject(t *testing.T) {

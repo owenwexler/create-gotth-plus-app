@@ -14,6 +14,12 @@ create-gotth-plus-app my-app
 It asks for anything you don't pass as a flag, shows a summary, and writes the project. Nothing is
 written if you cancel.
 
+Before you confirm, it checks the tools the project needs: Go (at least the version in the template's
+`go.mod`), templ (the same version as the template's `go.mod`), the Tailwind CSS v4 standalone CLI,
+`make`, `bash`, `git`, `curl`, `openssl`, and a C compiler for the CGO SQLite driver. A missing or
+wrong version is a warning with install steps, not an error: the project is still created, but
+`make setup` needs the tools.
+
 ## Flags
 
 | Flag | Default | |
@@ -25,6 +31,7 @@ written if you cancel.
 | `--yes`, `-y` | | Ask nothing: flags, then defaults (for CI and AI agents) |
 | `--force` | | Write into a directory that is not empty |
 | `--accessible` | `$ACCESSIBLE` | Plain prompts for screen readers |
+| `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
 More choices (database, auth, tests, Docker, CI) are coming; see `SPEC.md`.

@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/mod/modfile"
+
 	"github.com/owenwexler/create-gotth-plus-app/internal/options"
 )
 
@@ -47,6 +49,28 @@ func TemplateVersion(fsys fs.FS) string {
 		return "unknown"
 	}
 	return strings.TrimSpace(string(b))
+}
+
+// Requirements reads the minimum Go version and the templ version from the template's go.mod, so
+// the prerequisite check always matches the template.
+func Requirements(fsys fs.FS) (goVersion, templVersion string, err error) {
+	b, err := fs.ReadFile(fsys, goModTemplate)
+	if err != nil {
+		return "", "", err
+	}
+	mf, err := modfile.Parse(goModTemplate, b, nil)
+	if err != nil {
+		return "", "", err
+	}
+	if mf.Go == nil {
+		return "", "", errors.New("template go.mod has no go line")
+	}
+	for _, r := range mf.Require {
+		if r.Mod.Path == "github.com/a-h/templ" {
+			return mf.Go.Version, r.Mod.Version, nil
+		}
+	}
+	return "", "", errors.New("template go.mod does not require github.com/a-h/templ")
 }
 
 // Project is a generated project held in memory: slash-separated relative paths to file contents.

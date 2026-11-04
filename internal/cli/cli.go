@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/owenwexler/create-gotth-plus-app/internal/options"
+	"github.com/owenwexler/create-gotth-plus-app/internal/prereq"
 	"github.com/owenwexler/create-gotth-plus-app/internal/scaffold"
 )
 
@@ -38,11 +39,13 @@ type IO struct {
 	Err io.Writer
 	// Getwd returns the working directory the project name is relative to.
 	Getwd func() (string, error)
+	// Tools finds the prerequisite tools; nil means the real PATH.
+	Tools *prereq.Runner
 }
 
 // flags are the parsed command-line flags, plus which ones were given (so prompts can skip them).
 type flags struct {
-	yes, force, accessible, version bool
+	yes, force, accessible, version, skipChecks bool
 
 	module       string
 	port         int
@@ -62,6 +65,7 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&f.force, "force", false, "write into a directory that is not empty")
 	fs.BoolVar(&f.accessible, "accessible", os.Getenv("ACCESSIBLE") != "", "plain prompts for screen readers (also set by ACCESSIBLE=1)")
 	fs.BoolVar(&f.version, "version", false, "print the version and exit")
+	fs.BoolVar(&f.skipChecks, "skip-checks", false, "don't check that Go, templ, tailwindcss and the other tools are installed")
 
 	fs.StringVar(&f.module, "module", "", "Go module path (default github.com/<git config github.user>/<name>, or <name>)")
 	fs.IntVar(&f.port, "port", defaults.Port, "development port")
@@ -187,6 +191,11 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 
 	dir := dirFor(opts.Name)
 	printSummary(stdio.Out, opts, dir, scaffold.TemplateVersion(tmpl))
+	if !f.skipChecks {
+		if err := checkTools(ctx, stdio, tmpl); err != nil {
+			return err
+		}
+	}
 	if interactive {
 		ok, err := p.confirm(ctx)
 		if err != nil {
@@ -206,6 +215,25 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	}
 
 	printNextSteps(stdio.Out, opts)
+	return nil
+}
+
+// checkTools reports missing or unsuitable tools. They are warnings: only reading the template's
+// versions can fail.
+func checkTools(ctx context.Context, stdio IO, tmpl fs.FS) error {
+	goVersion, templVersion, err := scaffold.Requirements(tmpl)
+	if err != nil {
+		return fmt.Errorf("read template requirements: %w", err)
+	}
+	runner := prereq.System()
+	if stdio.Tools != nil {
+		runner = *stdio.Tools
+	}
+	// The template uses the CGO SQLite driver (mattn/go-sqlite3), so it always needs a C compiler
+	// for now; the database step makes this depend on the chosen driver.
+	tools := prereq.Tools(prereq.Requirements{Go: goVersion, Templ: templVersion}, prereq.Needs{CCompiler: true})
+	prereq.Report(stdio.Out, runner.Check(ctx, tools))
+	fmt.Fprintln(stdio.Out)
 	return nil
 }
 
