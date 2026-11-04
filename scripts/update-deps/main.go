@@ -1,6 +1,8 @@
-// Command update-deps writes internal/scaffold/_deps: for each database choice that changes the
-// template's dependencies, it generates a project, runs `go get` for the driver and `go mod tidy`,
-// and saves the resulting go.mod and go.sum. Run it with `make update-deps` from the repository root.
+// Command update-deps refreshes what generated projects pin: internal/scaffold/pins.go (Tailwind,
+// GitHub Actions and images for the Dockerfile and CI), and internal/scaffold/_deps (for each set of
+// choices that changes the dependencies, it generates a project, runs `go get` for the driver and
+// `go mod tidy`, and saves the go.mod and go.sum). Run it with `make update-deps` from the
+// repository root.
 package main
 
 import (
@@ -41,6 +43,14 @@ func run() error {
 	tmpl := scaffold.Template()
 	templateModule, err := templateModulePath(tmpl)
 	if err != nil {
+		return err
+	}
+
+	goVersion, _, err := scaffold.Requirements(tmpl)
+	if err != nil {
+		return err
+	}
+	if err := updatePins(goVersion); err != nil {
 		return err
 	}
 

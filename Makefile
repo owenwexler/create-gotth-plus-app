@@ -19,7 +19,7 @@ vet: ## Vet the CLI
 	go vet ./...
 
 fmt: ## Format the CLI's Go files (the template is left alone)
-	gofmt -w main.go scripts internal/cli internal/options internal/prereq internal/scaffold/*.go
+	gofmt -w main.go scripts internal/cli internal/options internal/post internal/prereq internal/scaffold/*.go
 
 sync-template: ## Copy ../gotth-plus (committed files at HEAD) into the embedded template
 	./scripts/sync-template.sh
@@ -27,5 +27,5 @@ sync-template: ## Copy ../gotth-plus (committed files at HEAD) into the embedded
 try: build ## Generate ./tmp/demo-app with defaults, to look at the output
 	rm -rf tmp/demo-app && mkdir -p tmp && cd tmp && ../bin/create-gotth-plus-app --yes demo-app
 
-update-deps: ## Regenerate internal/scaffold/_deps (go.mod/go.sum per database choice); needs network
+update-deps: ## Refresh internal/scaffold/pins.go and _deps (go.mod/go.sum per choice); needs network
 	go run ./scripts/update-deps

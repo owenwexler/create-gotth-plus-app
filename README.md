@@ -36,6 +36,8 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
 | `--e2e` | `true` | Include the Playwright end-to-end tests (`--e2e=false` removes them, their make targets and dependency) |
 | `--live-reload` | `templ` | What `make dev` runs: `templ` (templ's proxy) or `air`; both reload the browser on port 7331 |
+| `--docker` | `true` | Add a production `Dockerfile` (distroless, non-root, pinned Tailwind) and `.dockerignore` |
+| `--ci` | `true` | Add a GitHub Actions workflow (verify, generated-code check, vet, test with a database service, govulncheck, Docker build) |
 | `--js` | `true` | Download htmx, Alpine (CSP) and hx-optimistic, record versions and SHA-384 hashes in the README, and commit them |
 | `--axe` | `true` | Download axe-core (sha512-verified, from the npm registry) for the accessibility test; off without `--e2e` |
 | `--git` | `true` | `git init` and a first commit (skipped inside an existing repository or a non-empty directory) |
@@ -46,7 +48,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-More choices (auth, Docker, CI) are coming; see `SPEC.md`.
+Auth is coming next; see `SPEC.md`.
 
 Every project gets a fixed `air.toml` (gotth-plus's runs no `templ generate`, and `make air` didn't
 pass `-c air.toml`, so air ignored it) with air's browser-reloading proxy on port 7331.
@@ -81,7 +83,7 @@ of quietly producing a wrong project.
 make test            # includes generating a project and running go build, vet and test on it
 make try             # generate ./tmp/demo-app to look at
 make sync-template   # pull in the latest committed gotth-plus from ../gotth-plus
-make update-deps     # regenerate _deps; after sync-template, or to update the drivers (needs network)
+make update-deps     # refresh pins.go and _deps; after sync-template, or to update drivers, Tailwind and actions (needs network)
 ```
 
 After `make sync-template`, run `make update-deps` and `make test`: that is how changes in

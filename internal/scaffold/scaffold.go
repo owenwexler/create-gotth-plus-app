@@ -151,6 +151,7 @@ func build(fsys fs.FS, opts options.Options, dir string, withDeps bool) (Project
 		{"module path", func() error { return rewriteModule(p, opts.ModulePath) }},
 		{"project name", func() error { return setProjectName(p, name, version) }},
 		{"environment", func() error { return setEnv(p, opts) }},
+		{"Docker and CI", func() error { return applyDevOps(p, opts, name) }},
 		{"gofmt", func() error { return formatChanged(p, original) }},
 	}
 	for _, s := range steps {

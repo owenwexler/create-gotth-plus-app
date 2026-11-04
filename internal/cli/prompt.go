@@ -112,6 +112,18 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			).
 			Value(&o.LiveReload))
 	}
+	if !given["docker"] {
+		project = append(project, huh.NewConfirm().
+			Title("Add a production Dockerfile?").
+			Description("Multi-stage build into a distroless image that runs as a non-root user. Fly.io, Railway and Render can build it as it is.").
+			Value(&o.Docker))
+	}
+	if !given["ci"] {
+		project = append(project, huh.NewConfirm().
+			Title("Add GitHub Actions CI?").
+			Description("go mod verify, a check that generated code and formatting are committed, vet, tests (with a database service when needed), govulncheck, and a Docker build.").
+			Value(&o.CI))
+	}
 	if len(project) > 0 {
 		groups = append(groups, huh.NewGroup(project...))
 	}

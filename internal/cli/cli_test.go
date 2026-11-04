@@ -280,3 +280,29 @@ func TestFailedStepExitsNonZero(t *testing.T) {
 		t.Error("the project should stay")
 	}
 }
+
+func TestDockerAndCIFlags(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, f := range []string{"Dockerfile", ".dockerignore", ".github/workflows/ci.yml"} {
+		if _, err := os.Stat(filepath.Join(dir, "app", f)); err != nil {
+			t.Errorf("%s not written by default", f)
+		}
+	}
+	if !strings.Contains(out, "Dockerfile           yes") || !strings.Contains(out, "GitHub Actions CI    yes") {
+		t.Errorf("summary:\n%s", out)
+	}
+
+	dir = t.TempDir()
+	if code, _, errOut := runCLI(t, dir, "--yes", "--docker=false", "--ci=false", "app"); code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, f := range []string{"Dockerfile", ".github"} {
+		if _, err := os.Stat(filepath.Join(dir, "app", f)); err == nil {
+			t.Errorf("%s written with --docker=false --ci=false", f)
+		}
+	}
+}

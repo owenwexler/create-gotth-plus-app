@@ -61,8 +61,8 @@ type flags struct {
 	db           string
 	sqliteDriver string
 
-	js, axe, git, setup, e2e bool
-	liveReload               string
+	js, axe, git, setup, e2e, docker, ci bool
+	liveReload                           string
 
 	set  map[string]bool
 	name string // the positional project name, if any
@@ -87,6 +87,8 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
 	fs.BoolVar(&f.e2e, "e2e", defaults.E2E, "include the Playwright end-to-end (browser) tests")
 	fs.StringVar(&f.liveReload, "live-reload", string(defaults.LiveReload), "what make dev runs: templ (templ's proxy) or air")
+	fs.BoolVar(&f.docker, "docker", defaults.Docker, "add a production Dockerfile (distroless, non-root)")
+	fs.BoolVar(&f.ci, "ci", defaults.CI, "add a GitHub Actions workflow (verify, generated-code check, vet, test, govulncheck)")
 	fs.BoolVar(&f.js, "js", defaults.CommitJS, "download htmx, Alpine (CSP) and hx-optimistic, record their versions and hashes, and commit them")
 	fs.BoolVar(&f.axe, "axe", defaults.Axe, "download axe-core for the accessibility test")
 	fs.BoolVar(&f.git, "git", defaults.Git, "git init and make a first commit")
@@ -188,6 +190,7 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 		return err
 	}
 	opts.CommitJS, opts.Axe, opts.Git, opts.Setup, opts.E2E = f.js, f.axe, f.git, f.setup, f.e2e
+	opts.Docker, opts.CI = f.docker, f.ci
 	if opts.LiveReload, err = options.ParseLiveReload(f.liveReload); err != nil {
 		return err
 	}
@@ -322,6 +325,8 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 		{"Port", strconv.Itoa(o.Port)},
 		{"E2E tests", yesNo(o.E2E)},
 		{"Live reload", string(o.LiveReload)},
+		{"Dockerfile", yesNo(o.Docker)},
+		{"GitHub Actions CI", yesNo(o.CI)},
 		{"Random SeedAdminKey", yesNo(o.SeedAdminKey)},
 		{"Commit JS libraries", yesNo(o.CommitJS)},
 		{"Download axe-core", yesNo(o.Axe)},

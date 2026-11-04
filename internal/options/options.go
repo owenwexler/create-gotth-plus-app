@@ -33,6 +33,10 @@ type Options struct {
 	E2E bool
 	// LiveReload is what make dev runs.
 	LiveReload LiveReload
+	// Docker adds a production Dockerfile and .dockerignore.
+	Docker bool
+	// CI adds a GitHub Actions workflow.
+	CI bool
 
 	// What happens after the files are written.
 
@@ -132,6 +136,8 @@ func Defaults() Options {
 		SQLiteDriver: PureGo,
 		E2E:          true,
 		LiveReload:   TemplProxy,
+		Docker:       true,
+		CI:           true,
 		CommitJS:     true,
 		Axe:          true,
 		Git:          true,
