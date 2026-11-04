@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"golang.org/x/mod/module"
 )
@@ -23,6 +24,67 @@ type Options struct {
 	Port int
 	// SeedAdminKey writes a random SeedAdminKey into .env, so POST /seed needs it.
 	SeedAdminKey bool
+	// Database is the database the app uses.
+	Database Database
+	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
+	SQLiteDriver SQLiteDriver
+}
+
+// Database is a supported database.
+type Database string
+
+const (
+	SQLite   Database = "sqlite"
+	Postgres Database = "postgres"
+	MySQL    Database = "mysql"
+)
+
+// Databases lists the supported databases in the order they are offered.
+var Databases = []Database{SQLite, Postgres, MySQL}
+
+// Label is the database's display name.
+func (d Database) Label() string {
+	switch d {
+	case SQLite:
+		return "SQLite"
+	case Postgres:
+		return "Postgres"
+	case MySQL:
+		return "MySQL"
+	}
+	return string(d)
+}
+
+// IsServer reports whether the database runs as a separate server (as opposed to a file).
+func (d Database) IsServer() bool { return d == Postgres || d == MySQL }
+
+// SQLiteDriver is a GORM SQLite driver.
+type SQLiteDriver string
+
+const (
+	// PureGo is github.com/glebarez/sqlite: no C compiler, builds with CGO_ENABLED=0.
+	PureGo SQLiteDriver = "purego"
+	// CGO is gorm.io/driver/sqlite on mattn/go-sqlite3: the C SQLite library, needs a C compiler.
+	CGO SQLiteDriver = "cgo"
+)
+
+// SQLiteDrivers lists the SQLite drivers in the order they are offered.
+var SQLiteDrivers = []SQLiteDriver{PureGo, CGO}
+
+// NeedsCCompiler reports whether the generated project needs a C compiler to build.
+func (o Options) NeedsCCompiler() bool {
+	return o.Database == SQLite && o.SQLiteDriver == CGO
+}
+
+// DatabaseLabel describes the database choice, including the SQLite driver.
+func (o Options) DatabaseLabel() string {
+	if o.Database != SQLite {
+		return o.Database.Label()
+	}
+	if o.SQLiteDriver == CGO {
+		return "SQLite (CGO driver, mattn/go-sqlite3)"
+	}
+	return "SQLite (pure Go driver, glebarez/sqlite)"
 }
 
 // Defaults returns the options used for anything the user does not answer.
@@ -30,7 +92,51 @@ func Defaults() Options {
 	return Options{
 		Port:         3000,
 		SeedAdminKey: true,
+		Database:     SQLite,
+		SQLiteDriver: PureGo,
 	}
+}
+
+// ParseDatabase reads a --db value.
+func ParseDatabase(s string) (Database, error) {
+	for _, d := range Databases {
+		if string(d) == s {
+			return d, nil
+		}
+	}
+	return "", fmt.Errorf("unknown database %q; use sqlite, postgres or mysql", s)
+}
+
+// ParseSQLiteDriver reads a --sqlite-driver value.
+func ParseSQLiteDriver(s string) (SQLiteDriver, error) {
+	for _, d := range SQLiteDrivers {
+		if string(d) == s {
+			return d, nil
+		}
+	}
+	return "", fmt.Errorf("unknown SQLite driver %q; use purego or cgo", s)
+}
+
+// DatabaseName is the database name used in the generated DatabaseURL for a project: the project
+// name with anything other than letters, digits and underscores turned into underscores.
+func DatabaseName(projectName string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(projectName) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	name := strings.Trim(b.String(), "_")
+	if name == "" || (name[0] >= '0' && name[0] <= '9') {
+		name = "app_" + name
+	}
+	if len(name) > 63 { // Postgres's identifier limit (MySQL's is 64)
+		name = name[:63]
+	}
+	return strings.TrimRight(name, "_")
 }
 
 // devProxyPort is used by templ's live-reload proxy (make dev), so the app cannot listen on it.
@@ -91,6 +197,12 @@ func (o Options) Validate() error {
 		return err
 	}
 	if err := ValidateModulePath(o.ModulePath); err != nil {
+		return err
+	}
+	if _, err := ParseDatabase(string(o.Database)); err != nil {
+		return err
+	}
+	if _, err := ParseSQLiteDriver(string(o.SQLiteDriver)); err != nil {
 		return err
 	}
 	return validatePort(o.Port)

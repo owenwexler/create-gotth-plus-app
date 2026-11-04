@@ -28,19 +28,35 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--module` | `github.com/<git config github.user>/<name>`, or `<name>` | Go module path |
 | `--port` | `3000` | Development port (`.env`) |
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
+| `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
+| `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
 | `--yes`, `-y` | | Ask nothing: flags, then defaults (for CI and AI agents) |
 | `--force` | | Write into a directory that is not empty |
 | `--accessible` | `$ACCESSIBLE` | Plain prompts for screen readers |
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-More choices (database, auth, tests, Docker, CI) are coming; see `SPEC.md`.
+More choices (auth, tests, Docker, CI) are coming; see `SPEC.md`.
+
+### Databases
+
+- **SQLite** is a file next to the app. The pure-Go driver needs no C compiler and builds with
+  `CGO_ENABLED=0`; the CGO driver is the C SQLite library (and the template as gotth-plus ships it).
+- **Postgres** and **MySQL** need a server, local or in the cloud. `.env` gets a `DatabaseURL` for
+  a local server and a database named after the project; the CLI prints the command that creates
+  it. The tests need a server too: each test creates its own throwaway database on
+  `TestDatabaseURL` (or `DatabaseURL`) and drops it afterwards.
 
 ## How it works
 
 The gotth-plus template is embedded in the binary (`internal/scaffold/_template`), so the CLI works
 offline and each CLI version always produces the same project. The generator reads the template into
 memory, applies the answers, and only then writes files.
+
+Database choices add or replace files from `internal/scaffold/_variants`, and swap in the
+`go.mod`/`go.sum` from `internal/scaffold/_deps` (made by `make update-deps`, so a new project is
+tidy without network access). A variant file that replaces a template file records the template
+file's hash; when gotth-plus changes that file, generation stops until the variant is reviewed.
 
 Every edit to template text must match exactly once (`Project.replaceOnce`). When gotth-plus changes
 in a way the generator doesn't expect, generation fails and the tests say which edit broke, instead
@@ -52,6 +68,16 @@ of quietly producing a wrong project.
 make test            # includes generating a project and running go build, vet and test on it
 make try             # generate ./tmp/demo-app to look at
 make sync-template   # pull in the latest committed gotth-plus from ../gotth-plus
+make update-deps     # regenerate _deps; after sync-template, or to update the drivers (needs network)
 ```
 
-After `make sync-template`, run `make test`: it is how changes in gotth-plus get noticed.
+After `make sync-template`, run `make update-deps` and `make test`: that is how changes in
+gotth-plus get noticed.
+
+`make test` builds and vets a generated Postgres and MySQL project, but only runs their tests
+against a server when you point it at one (the user needs to be allowed to create databases):
+
+```bash
+CGPA_TEST_POSTGRES_URL='postgres://localhost:5432/postgres?sslmode=disable' \
+CGPA_TEST_MYSQL_URL='root:pass@tcp(localhost:3306)/?parseTime=true' make test
+```

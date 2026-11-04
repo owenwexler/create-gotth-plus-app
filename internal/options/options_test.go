@@ -1,6 +1,9 @@
 package options
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateName(t *testing.T) {
 	for _, name := range []string{".", "app", "my-app", "my_app2", "a.b"} {
@@ -38,6 +41,53 @@ func TestValidatePort(t *testing.T) {
 		if err := ValidatePort(s); err == nil {
 			t.Errorf("ValidatePort(%q) = nil, want an error", s)
 		}
+	}
+}
+
+func TestDatabaseName(t *testing.T) {
+	for in, want := range map[string]string{
+		"my-app":                "my_app",
+		"app.v2":                "app_v2",
+		"9lives":                "app_9lives",
+		"Bob's 🙂":               "bob_s",
+		"---":                   "app",
+		strings.Repeat("a", 80): strings.Repeat("a", 63),
+	} {
+		if got := DatabaseName(in); got != want {
+			t.Errorf("DatabaseName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestParseDatabase(t *testing.T) {
+	for _, d := range Databases {
+		if got, err := ParseDatabase(string(d)); err != nil || got != d {
+			t.Errorf("ParseDatabase(%q) = %q, %v", d, got, err)
+		}
+	}
+	if _, err := ParseDatabase("oracle"); err == nil {
+		t.Error("ParseDatabase(oracle) = nil error")
+	}
+	if _, err := ParseSQLiteDriver("purego"); err != nil {
+		t.Error(err)
+	}
+	if _, err := ParseSQLiteDriver("wasm"); err == nil {
+		t.Error("ParseSQLiteDriver(wasm) = nil error")
+	}
+}
+
+func TestNeedsCCompiler(t *testing.T) {
+	o := Defaults()
+	if o.NeedsCCompiler() {
+		t.Error("default (pure Go SQLite) needs a C compiler")
+	}
+	o.SQLiteDriver = CGO
+	if !o.NeedsCCompiler() {
+		t.Error("CGO SQLite does not need a C compiler")
+	}
+	o.Database = Postgres
+	if o.NeedsCCompiler() {
+		t.Error("Postgres needs a C compiler")
 	}
 }
 

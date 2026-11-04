@@ -1,12 +1,16 @@
 package scaffold
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/semver"
 
 	"github.com/owenwexler/create-gotth-plus-app/internal/options"
 )
@@ -21,7 +25,7 @@ func testOptions() options.Options {
 	return o
 }
 
-func build(t *testing.T, o options.Options, dir string) Project {
+func mustBuild(t *testing.T, o options.Options, dir string) Project {
 	t.Helper()
 	p, err := Build(Template(), o, dir)
 	if err != nil {
@@ -31,7 +35,7 @@ func build(t *testing.T, o options.Options, dir string) Project {
 }
 
 func TestBuildRenamesModule(t *testing.T) {
-	p := build(t, testOptions(), "/work/demo-app")
+	p := mustBuild(t, testOptions(), "/work/demo-app")
 
 	if !strings.HasPrefix(string(p["go.mod"]), "module example.com/acme/demo\n") {
 		t.Errorf("go.mod starts with %q", strings.SplitN(string(p["go.mod"]), "\n", 2)[0])
@@ -54,7 +58,7 @@ func TestBuildRenamesModule(t *testing.T) {
 }
 
 func TestBuildFiles(t *testing.T) {
-	p := build(t, testOptions(), "/work/demo-app")
+	p := mustBuild(t, testOptions(), "/work/demo-app")
 
 	for _, name := range []string{versionFile, goModTemplate} {
 		if _, ok := p[name]; ok {
@@ -76,7 +80,7 @@ func TestBuildFiles(t *testing.T) {
 
 func TestBuildEnv(t *testing.T) {
 	o := testOptions()
-	p := build(t, o, "/work/demo-app")
+	p := mustBuild(t, o, "/work/demo-app")
 	if !strings.Contains(string(p[".env.example"]), "\nPort=4000\n") || !strings.Contains(string(p[".env"]), "\nPort=4000\n") {
 		t.Error("port not set in .env.example and .env")
 	}
@@ -88,7 +92,7 @@ func TestBuildEnv(t *testing.T) {
 	}
 
 	o.SeedAdminKey = false
-	p = build(t, o, "/work/demo-app")
+	p = mustBuild(t, o, "/work/demo-app")
 	if !strings.Contains(string(p[".env"]), "\nSeedAdminKey=\n") {
 		t.Error("SeedAdminKey set although it was turned off")
 	}
@@ -154,36 +158,179 @@ func TestCheckDest(t *testing.T) {
 	}
 }
 
-// TestGeneratedProjectBuilds writes a project and runs the Go tools on it, the way a user would.
-// It uses "." in a directory with an awkward name, so the title escaping is covered too.
+// choices are the database choices the generated-project tests cover. serverEnv names the variable
+// that points the generated project's tests at a server; without it, those tests are not run (the
+// project is still built and vetted).
+var choices = []struct {
+	name      string
+	db        options.Database
+	driver    options.SQLiteDriver
+	serverEnv string
+}{
+	{"sqlite-purego", options.SQLite, options.PureGo, ""},
+	{"sqlite-cgo", options.SQLite, options.CGO, ""},
+	{"postgres", options.Postgres, options.PureGo, "CGPA_TEST_POSTGRES_URL"},
+	{"mysql", options.MySQL, options.PureGo, "CGPA_TEST_MYSQL_URL"},
+}
+
+// TestGeneratedProjectBuilds writes a project for each database and runs the Go tools on it, the way
+// a user would. It uses "." in a directory with an awkward name, so the title escaping is covered too.
 func TestGeneratedProjectBuilds(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs go build, vet and test on a generated project")
+		t.Skip("runs go build, vet and test on generated projects")
 	}
-	dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
-	o := testOptions()
-	o.Name = "."
-	if err := build(t, o, dir).Write(dir); err != nil {
+	for _, c := range choices {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
+			o := testOptions()
+			o.Name = "."
+			o.Database = c.db
+			o.SQLiteDriver = c.driver
+			if err := mustBuild(t, o, dir).Write(dir); err != nil {
+				t.Fatal(err)
+			}
+
+			info, err := os.Stat(filepath.Join(dir, "download-js.sh"))
+			if err != nil || info.Mode().Perm() != 0o755 {
+				t.Errorf("download-js.sh is not executable: %v %v", info, err)
+			}
+
+			env := os.Environ()
+			if c.driver == options.PureGo || c.db.IsServer() {
+				env = append(env, "CGO_ENABLED=0") // proves the pure-Go drivers need no C compiler
+			}
+			cmds := [][]string{
+				{"mod", "tidy", "-diff"}, // _deps is up to date with the code
+				{"build", "./..."},
+				{"vet", "-tags", "e2e", "./..."},
+			}
+			switch {
+			case c.serverEnv == "":
+				cmds = append(cmds, []string{"test", "-count=1", "./..."})
+			case os.Getenv(c.serverEnv) != "":
+				env = append(env, "TestDatabaseURL="+os.Getenv(c.serverEnv))
+				cmds = append(cmds, []string{"test", "-count=1", "./..."})
+			default:
+				t.Logf("set %s to run the generated project's tests against a server", c.serverEnv)
+			}
+			for _, args := range cmds {
+				cmd := exec.Command("go", args...)
+				cmd.Dir = dir
+				cmd.Env = env
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+				}
+			}
+			if out, err := exec.Command("gofmt", "-l", dir).Output(); err != nil || len(out) > 0 {
+				t.Errorf("gofmt -l: %v\n%s", err, out)
+			}
+		})
+	}
+}
+
+func TestBuildDatabases(t *testing.T) {
+	for _, c := range choices {
+		t.Run(c.name, func(t *testing.T) {
+			o := testOptions()
+			o.Database = c.db
+			o.SQLiteDriver = c.driver
+			p := mustBuild(t, o, "/work/demo-app")
+			gomod := string(p["go.mod"])
+
+			switch {
+			case c.db == options.Postgres:
+				mustContain(t, p, "go.mod", "gorm.io/driver/postgres ")
+				mustContain(t, p, ".env", "\nDatabaseURL=postgres://localhost:5432/demo_app?sslmode=disable\n")
+				mustContain(t, p, "internal/model/model.go", "`gorm:\"type:uuid\"`")
+				mustContain(t, p, "README.md", "createdb demo_app")
+			case c.db == options.MySQL:
+				mustContain(t, p, "go.mod", "gorm.io/driver/mysql ")
+				mustContain(t, p, ".env", "\nDatabaseURL=root@tcp(localhost:3306)/demo_app?parseTime=true&charset=utf8mb4&loc=UTC\n")
+				mustContain(t, p, "internal/model/model.go", "`gorm:\"type:char(36)\"`")
+				mustContain(t, p, "internal/escaper/escaper.go", "no ESCAPE clause")
+			case c.driver == options.PureGo:
+				mustContain(t, p, "internal/database/database.go", `"github.com/glebarez/sqlite"`)
+				mustContain(t, p, "go.mod", "github.com/glebarez/sqlite ")
+			default:
+				mustContain(t, p, "go.mod", "gorm.io/driver/sqlite ")
+				mustContain(t, p, ".env", "\nDatabasePath=app.db\n")
+			}
+
+			if c.db.IsServer() || c.driver == options.PureGo {
+				if strings.Contains(gomod, "mattn/go-sqlite3") {
+					t.Error("go.mod still requires the CGO SQLite driver")
+				}
+			}
+			if c.db.IsServer() {
+				for _, name := range p.Paths() {
+					if strings.HasSuffix(name, ".go") && strings.Contains(string(p[name]), "DatabasePath") {
+						t.Errorf("%s still uses DatabasePath", name)
+					}
+				}
+				mustContain(t, p, "internal/database/dbtest/dbtest.go", `"example.com/acme/demo/internal/database"`)
+				mustContain(t, p, "cmd/server/testutil_test.go", "dbtest.Open(t)")
+				mustContain(t, p, "SECURITY.md", "### Data: "+c.db.Label()+" and GORM")
+				if strings.Contains(string(p[".gitignore"]), "*.db") {
+					t.Error(".gitignore still ignores SQLite files")
+				}
+			}
+		})
+	}
+}
+
+func mustContain(t *testing.T, p Project, file, want string) {
+	t.Helper()
+	if !strings.Contains(string(p[file]), want) {
+		t.Errorf("%s does not contain %q", file, want)
+	}
+}
+
+// TestDepsNotOlderThanTemplate catches a gotth-plus update (make sync-template) that raised a
+// dependency without make update-deps: the generated project would silently get the older version.
+func TestDepsNotOlderThanTemplate(t *testing.T) {
+	tmpl, err := fs.ReadFile(Template(), goModTemplate)
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	info, err := os.Stat(filepath.Join(dir, "download-js.sh"))
-	if err != nil || info.Mode().Perm() != 0o755 {
-		t.Errorf("download-js.sh is not executable: %v %v", info.Mode(), err)
-	}
-
-	for _, args := range [][]string{
-		{"build", "./..."},
-		{"vet", "-tags", "e2e", "./..."},
-		{"test", "-count=1", "./..."},
-	} {
-		cmd := exec.Command("go", args...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
+	want := requires(t, tmpl)
+	for _, key := range []string{"sqlite-purego", "postgres", "mysql"} {
+		b, err := fs.ReadFile(embedded, "_deps/"+key+"/"+goModTemplate)
+		if err != nil {
+			t.Fatalf("%s: %v (run make update-deps)", key, err)
+		}
+		got := requires(t, b)
+		for mod, v := range want {
+			if have, ok := got[mod]; ok && semver.Compare(have, v) < 0 {
+				t.Errorf("_deps/%s has %s %s, the template has %s: run make update-deps", key, mod, have, v)
+			}
+		}
+		if modfile.ModulePath(b) != modfile.ModulePath(tmpl) {
+			t.Errorf("_deps/%s/go.mod has module %q, want the template's", key, modfile.ModulePath(b))
 		}
 	}
-	if out, err := exec.Command("gofmt", "-l", dir).Output(); err != nil || len(out) > 0 {
-		t.Errorf("gofmt -l: %v\n%s", err, out)
+}
+
+func requires(t *testing.T, gomod []byte) map[string]string {
+	t.Helper()
+	mf, err := modfile.Parse("go.mod", gomod, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]string{}
+	for _, r := range mf.Require {
+		m[r.Mod.Path] = r.Mod.Version
+	}
+	return m
+}
+
+func TestOverlayRefusesChangedTemplateFile(t *testing.T) {
+	p, err := load(Template())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p["internal/database/database.go"] = append(p["internal/database/database.go"], "// changed upstream\n"...)
+	if err := p.overlay("postgres"); err == nil || !strings.Contains(err.Error(), "changed") {
+		t.Errorf("overlay = %v, want an error about the changed template file", err)
 	}
 }

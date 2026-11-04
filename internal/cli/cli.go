@@ -50,6 +50,8 @@ type flags struct {
 	module       string
 	port         int
 	seedAdminKey bool
+	db           string
+	sqliteDriver string
 
 	set  map[string]bool
 	name string // the positional project name, if any
@@ -70,6 +72,8 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.StringVar(&f.module, "module", "", "Go module path (default github.com/<git config github.user>/<name>, or <name>)")
 	fs.IntVar(&f.port, "port", defaults.Port, "development port")
 	fs.BoolVar(&f.seedAdminKey, "seed-admin-key", defaults.SeedAdminKey, "write a random SeedAdminKey into .env (--seed-admin-key=false to skip)")
+	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
+	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
 
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: create-gotth-plus-app [flags] [project-name]\n\n")
@@ -160,6 +164,15 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	opts.ModulePath = f.module
 	opts.Port = f.port
 	opts.SeedAdminKey = f.seedAdminKey
+	if opts.Database, err = options.ParseDatabase(f.db); err != nil {
+		return err
+	}
+	if opts.SQLiteDriver, err = options.ParseSQLiteDriver(f.sqliteDriver); err != nil {
+		return err
+	}
+	if f.set["sqlite-driver"] && f.set["db"] && opts.Database != options.SQLite {
+		return errors.New("--sqlite-driver only applies to --db=sqlite")
+	}
 
 	// check a name given as an argument before asking anything else
 	if opts.Name != "" {
@@ -192,7 +205,7 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	dir := dirFor(opts.Name)
 	printSummary(stdio.Out, opts, dir, scaffold.TemplateVersion(tmpl))
 	if !f.skipChecks {
-		if err := checkTools(ctx, stdio, tmpl); err != nil {
+		if err := checkTools(ctx, stdio, tmpl, opts); err != nil {
 			return err
 		}
 	}
@@ -214,13 +227,13 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 		return fmt.Errorf("write project: %w", err)
 	}
 
-	printNextSteps(stdio.Out, opts)
+	printNextSteps(stdio.Out, opts, dir)
 	return nil
 }
 
 // checkTools reports missing or unsuitable tools. They are warnings: only reading the template's
 // versions can fail.
-func checkTools(ctx context.Context, stdio IO, tmpl fs.FS) error {
+func checkTools(ctx context.Context, stdio IO, tmpl fs.FS, opts options.Options) error {
 	goVersion, templVersion, err := scaffold.Requirements(tmpl)
 	if err != nil {
 		return fmt.Errorf("read template requirements: %w", err)
@@ -229,9 +242,7 @@ func checkTools(ctx context.Context, stdio IO, tmpl fs.FS) error {
 	if stdio.Tools != nil {
 		runner = *stdio.Tools
 	}
-	// The template uses the CGO SQLite driver (mattn/go-sqlite3), so it always needs a C compiler
-	// for now; the database step makes this depend on the chosen driver.
-	tools := prereq.Tools(prereq.Requirements{Go: goVersion, Templ: templVersion}, prereq.Needs{CCompiler: true})
+	tools := prereq.Tools(prereq.Requirements{Go: goVersion, Templ: templVersion}, prereq.Needs{CCompiler: opts.NeedsCCompiler()})
 	prereq.Report(stdio.Out, runner.Check(ctx, tools))
 	fmt.Fprintln(stdio.Out)
 	return nil
@@ -255,6 +266,7 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 	rows := [][2]string{
 		{"Directory", dir},
 		{"Module path", o.ModulePath},
+		{"Database", o.DatabaseLabel()},
 		{"Port", strconv.Itoa(o.Port)},
 		{"Random SeedAdminKey", yesNo(o.SeedAdminKey)},
 	}
@@ -264,10 +276,21 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 	fmt.Fprintln(w)
 }
 
-func printNextSteps(w io.Writer, o options.Options) {
+// projectName is the name the generator used: the directory's name when the project is ".".
+func projectName(o options.Options, dir string) string {
+	if o.Name == "." {
+		return filepath.Base(dir)
+	}
+	return o.Name
+}
+
+func printNextSteps(w io.Writer, o options.Options, dir string) {
 	fmt.Fprintf(w, "Done. Next steps:\n\n")
 	if o.Name != "." {
 		fmt.Fprintf(w, "  cd %s\n", o.Name)
+	}
+	if cmd := scaffold.CreateDatabaseCommand(o.Database, options.DatabaseName(projectName(o, dir))); cmd != "" {
+		fmt.Fprintf(w, "  %s    # the development database; check DatabaseURL in .env\n", cmd)
 	}
 	fmt.Fprintf(w, "  make setup    # Go modules, the JS libraries, the test browser, a first build\n")
 	fmt.Fprintf(w, "  make dev      # live reload at http://localhost:7331\n\n")

@@ -69,10 +69,37 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			Value(&o.SeedAdminKey))
 	}
 
-	if len(fields) == 0 {
+	groups := []*huh.Group{}
+	if len(fields) > 0 {
+		groups = append(groups, huh.NewGroup(fields...))
+	}
+
+	if !given["db"] {
+		dbOptions := make([]huh.Option[options.Database], len(options.Databases))
+		for i, d := range options.Databases {
+			dbOptions[i] = huh.NewOption(d.Label(), d)
+		}
+		groups = append(groups, huh.NewGroup(huh.NewSelect[options.Database]().
+			Title("Database").
+			Description("SQLite is a file next to the app. Postgres and MySQL need a server, local or in the cloud, for the app and its tests.").
+			Options(dbOptions...).
+			Value(&o.Database)))
+	}
+	if !given["sqlite-driver"] {
+		groups = append(groups, huh.NewGroup(huh.NewSelect[options.SQLiteDriver]().
+			Title("SQLite driver").
+			Options(
+				huh.NewOption("Pure Go (glebarez/sqlite): no C compiler, CGO_ENABLED=0 builds", options.PureGo),
+				huh.NewOption("CGO (mattn/go-sqlite3): the C SQLite library, needs a C compiler", options.CGO),
+			).
+			Value(&o.SQLiteDriver)).
+			WithHideFunc(func() bool { return o.Database != options.SQLite }))
+	}
+
+	if len(groups) == 0 {
 		return nil
 	}
-	if err := p.run(ctx, huh.NewGroup(fields...)); err != nil {
+	if err := p.run(ctx, groups...); err != nil {
 		return err
 	}
 

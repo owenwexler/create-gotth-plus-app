@@ -4,11 +4,13 @@
 package scaffold
 
 import (
+	"bytes"
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go/format"
 	"html"
 	"io/fs"
 	"os"
@@ -23,7 +25,10 @@ import (
 	"github.com/owenwexler/create-gotth-plus-app/internal/options"
 )
 
-//go:embed all:_template
+// _template is gotth-plus itself, _variants holds files that database choices add or replace, and
+// _deps holds the go.mod/go.sum for each choice (see make update-deps).
+//
+//go:embed all:_template all:_variants all:_deps
 var embedded embed.FS
 
 const (
@@ -89,9 +94,27 @@ func (p Project) Paths() []string {
 // Build reads the template and applies opts to it. dir is the absolute directory the project will be
 // written to; it only supplies the display name when opts.Name is ".".
 func Build(fsys fs.FS, opts options.Options, dir string) (Project, error) {
+	return build(fsys, opts, dir, true)
+}
+
+// BuildWithoutDeps is Build, but keeps the template's go.mod and go.sum instead of the ones in
+// _deps. Only the update-deps tool uses it, to produce those files.
+func BuildWithoutDeps(fsys fs.FS, opts options.Options, dir string) (Project, error) {
+	return build(fsys, opts, dir, false)
+}
+
+func build(fsys fs.FS, opts options.Options, dir string, withDeps bool) (Project, error) {
 	p, err := load(fsys)
 	if err != nil {
 		return nil, err
+	}
+	templateModule, err := modulePath(p["go.mod"])
+	if err != nil {
+		return nil, err
+	}
+	original := Project{}
+	for name, b := range p {
+		original[name] = b
 	}
 
 	name := opts.Name
@@ -104,9 +127,18 @@ func Build(fsys fs.FS, opts options.Options, dir string) (Project, error) {
 		what string
 		run  func() error
 	}{
+		// the database step and the dependencies use the template's module path, so they come first
+		{"database", func() error { return applyDatabase(p, opts, templateModule, options.DatabaseName(name)) }},
+		{"dependencies", func() error {
+			if !withDeps {
+				return nil
+			}
+			return applyDeps(p, depsKey(opts))
+		}},
 		{"module path", func() error { return rewriteModule(p, opts.ModulePath) }},
 		{"project name", func() error { return setProjectName(p, name, version) }},
 		{"environment", func() error { return setEnv(p, opts) }},
+		{"gofmt", func() error { return formatChanged(p, original) }},
 	}
 	for _, s := range steps {
 		if err := s.run(); err != nil {
@@ -114,6 +146,56 @@ func Build(fsys fs.FS, opts options.Options, dir string) (Project, error) {
 		}
 	}
 	return p, nil
+}
+
+func modulePath(gomod []byte) (string, error) {
+	mf, err := modfile.Parse("go.mod", gomod, nil)
+	if err != nil {
+		return "", err
+	}
+	if mf.Module == nil {
+		return "", errors.New("go.mod has no module line")
+	}
+	return mf.Module.Mod.Path, nil
+}
+
+// ErrMissingDeps means _deps has no go.mod/go.sum for a database choice yet.
+var ErrMissingDeps = errors.New("no go.mod/go.sum in _deps for this choice; run make update-deps")
+
+// applyDeps swaps in the go.mod and go.sum for a database choice. They are produced by
+// `make update-deps`, which runs go mod tidy on a generated project, so a new project needs no
+// network access to be consistent.
+func applyDeps(p Project, key string) error {
+	if key == "" {
+		return nil
+	}
+	// go.mod is stored as go.mod.tmpl: go:embed skips directories that contain a go.mod
+	for f, stored := range map[string]string{"go.mod": goModTemplate, "go.sum": "go.sum"} {
+		b, err := fs.ReadFile(embedded, "_deps/"+key+"/"+stored)
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%s: %w", key, ErrMissingDeps)
+		}
+		if err != nil {
+			return err
+		}
+		p[f] = b
+	}
+	return nil
+}
+
+// formatChanged gofmts every .go file the steps changed, so edits never leave misaligned code.
+func formatChanged(p, original Project) error {
+	for name, b := range p {
+		if path.Ext(name) != ".go" || bytes.Equal(b, original[name]) {
+			continue
+		}
+		formatted, err := format.Source(b)
+		if err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		p[name] = formatted
+	}
+	return nil
 }
 
 // load reads every template file into memory, restoring go.mod and dropping the version marker.

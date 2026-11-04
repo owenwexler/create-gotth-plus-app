@@ -36,7 +36,7 @@ func runCLI(t *testing.T, dir string, args ...string) (code int, stdout, stderr 
 
 func TestMissingToolsWarnButStillGenerate(t *testing.T) {
 	dir := t.TempDir()
-	code, out, errOut := runCLI(t, dir, "--yes", "app")
+	code, out, errOut := runCLI(t, dir, "--yes", "--sqlite-driver=cgo", "app")
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
@@ -47,6 +47,12 @@ func TestMissingToolsWarnButStillGenerate(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "app", "go.mod")); err != nil {
 		t.Error("project not written")
+	}
+
+	// the pure-Go SQLite driver (the default) needs no C compiler
+	_, out, _ = runCLI(t, t.TempDir(), "--yes", "app")
+	if strings.Contains(out, "C compiler") {
+		t.Errorf("C compiler checked for pure-Go SQLite:\n%s", out)
 	}
 
 	_, out, _ = runCLI(t, t.TempDir(), "--yes", "--skip-checks", "app")
@@ -110,6 +116,9 @@ func TestErrors(t *testing.T) {
 		{"bad module", []string{"--yes", "app", "--module", "a b"}, exitError, "module path"},
 		{"bad port", []string{"--yes", "app", "--port", "7331"}, exitError, "live-reload"},
 		{"not empty", []string{"--yes", "taken"}, exitError, "not empty"},
+		{"bad db", []string{"--yes", "app", "--db", "oracle"}, exitError, "unknown database"},
+		{"bad sqlite driver", []string{"--yes", "app", "--sqlite-driver", "wasm"}, exitError, "unknown SQLite driver"},
+		{"sqlite driver with postgres", []string{"--yes", "app", "--db=postgres", "--sqlite-driver=cgo"}, exitError, "only applies to --db=sqlite"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,6 +147,24 @@ func TestForceWritesIntoNonEmptyDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
 		t.Error("no go.mod written")
+	}
+}
+
+func TestDatabaseFlag(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "--db=postgres", "shop-app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "Database             Postgres") {
+		t.Errorf("summary has no database row:\n%s", out)
+	}
+	if !strings.Contains(out, "createdb shop_app") {
+		t.Errorf("next steps don't say how to create the database:\n%s", out)
+	}
+	env, _ := os.ReadFile(filepath.Join(dir, "shop-app", ".env"))
+	if !strings.Contains(string(env), "DatabaseURL=postgres://localhost:5432/shop_app") {
+		t.Errorf(".env has no Postgres DatabaseURL:\n%s", env)
 	}
 }
 
