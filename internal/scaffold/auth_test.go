@@ -2,6 +2,7 @@ package scaffold
 
 import (
 	"bytes"
+	"go/format"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -39,7 +40,7 @@ func TestBuildAuth(t *testing.T) {
 			mustContain(t, p, "internal/seed/seed.go", "h.db.AutoMigrate(model.All()...)")
 			mustContain(t, p, "go.mod", "github.com/alexedwards/scs/v2 ")
 			mustContain(t, p, "SECURITY.md", "This project signs users in with an email and a password.")
-			mustContain(t, p, "AGENTS.md", "- Auth: email and password")
+			mustContain(t, p, "AGENTS.md", "- Auth: sign-in with an email and a password")
 			mustContain(t, p, "README.md", "| GET | `/account` |")
 			if !regexp.MustCompile(`\nSeedUserPassword=[0-9a-f]{24}\n`).Match(p[".env"]) {
 				t.Error(".env has no random SeedUserPassword")
@@ -106,5 +107,112 @@ func TestVariantTemplGenerated(t *testing.T) {
 		if err != nil || !bytes.Equal(got, want) {
 			t.Errorf("%s is not what templ %s generates: run make gen-templ", gen, version)
 		}
+	}
+}
+
+func TestStripBlocks(t *testing.T) {
+	src := "a\n// cgpa:if google github\nb\n// cgpa:end\n\t// cgpa:if apple\nc\n\t// cgpa:end\nd\n"
+	got, err := stripBlocks(src, map[string]bool{"google": false, "github": true, "apple": false})
+	if err != nil || got != "a\nb\nd\n" {
+		t.Errorf("stripBlocks = %q, %v", got, err)
+	}
+	for _, bad := range []string{
+		"// cgpa:if nope\n// cgpa:end\n", // unknown condition
+		"// cgpa:if apple\n",             // not closed
+		"// cgpa:end\n",                  // not opened
+		"// cgpa:if apple\n// cgpa:if apple\n// cgpa:end\n",
+		"//cgpa:if apple\n//cgpa:end\n", // gofmt would move these
+		"// cgpa:else\n",
+	} {
+		if _, err := stripBlocks(bad, map[string]bool{"apple": true}); err == nil {
+			t.Errorf("stripBlocks(%q) = nil error", bad)
+		}
+	}
+}
+
+// TestVariantsAreGofmtClean: the variant sources are formatted as they are, so gofmt has never
+// moved a marker (see stripBlocks), and generated files only differ from them where blocks went.
+func TestVariantsAreGofmtClean(t *testing.T) {
+	err := fs.WalkDir(embedded, "_variants", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		b, err := fs.ReadFile(embedded, path)
+		if err != nil {
+			return err
+		}
+		formatted, err := format.Source(b)
+		if err != nil {
+			t.Errorf("%s: %v", path, err)
+		} else if !bytes.Equal(formatted, b) {
+			t.Errorf("%s is not gofmt-formatted", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestNoStrayDocComments: with a provider left out, none of its doc comments stay behind.
+func TestNoStrayDocComments(t *testing.T) {
+	o := testOptions()
+	o.Auth, o.AuthMethods = options.BuiltinAuth, []options.AuthMethod{options.Google}
+	p := mustBuild(t, o, "/work/demo-app")
+	for _, name := range []string{"internal/auth/providers.go", "internal/app/providers.go"} {
+		for _, w := range []string{"GitHub", "Apple"} {
+			if strings.Contains(string(p[name]), w) {
+				t.Errorf("%s mentions %s in a Google-only project", name, w)
+			}
+		}
+	}
+	for _, name := range p.Paths() {
+		if strings.Contains(string(p[name]), "cgpa:") {
+			t.Errorf("%s still has a // cgpa: marker", name)
+		}
+	}
+}
+
+func TestBuildOAuth(t *testing.T) {
+	o := testOptions()
+	o.Auth, o.AuthMethods = options.BuiltinAuth, []options.AuthMethod{options.GitHub, options.Apple}
+	p := mustBuild(t, o, "/work/demo-app")
+
+	for _, f := range []string{"internal/auth/oauth.go", "internal/auth/providers.go", "internal/factory/oauth.go", "internal/service/identity.go", "cmd/server/oauth_test.go"} {
+		if _, ok := p[f]; !ok {
+			t.Errorf("%s is missing", f)
+		}
+	}
+	// no password: none of its files, settings or routes
+	for _, f := range []string{"internal/auth/password.go", "internal/mail/mail.go", "internal/factory/password.go", "cmd/server/auth_test.go"} {
+		if _, ok := p[f]; ok {
+			t.Errorf("%s is there without password sign-in", f)
+		}
+	}
+	for _, w := range []string{"SMTPHost", "SeedUserPassword"} {
+		if strings.Contains(string(p[".env.example"]), w) || strings.Contains(string(p["internal/config/config.go"]), w) {
+			t.Errorf("%s set up without password sign-in", w)
+		}
+	}
+	mustContain(t, p, ".env.example", "\nGitHubClientID=\nGitHubClientSecret=\n")
+	mustContain(t, p, ".env.example", "\nApplePrivateKeyFile=\n")
+	mustContain(t, p, "internal/config/config.go", "GitHubClientID, GitHubClientSecret must be set in production")
+	mustContain(t, p, "internal/app/app.go", `mux.HandleFunc("POST /auth/{provider}/callback"`)
+	mustContain(t, p, "internal/app/app.go", `crossOrigin.AddInsecureBypassPattern(appleCallback)`)
+	mustContain(t, p, "SECURITY.md", "`POST /auth/apple/callback` alone is exempt")
+	mustContain(t, p, "README.md", "### Sign-in providers")
+	mustContain(t, p, "go.mod", "github.com/coreos/go-oidc/v3 ")
+	if strings.Contains(string(p["internal/auth/providers.go"]), "GoogleEndpoints") {
+		t.Error("Google's code is there without Google")
+	}
+	if strings.Contains(string(p[".env"]), "SeedUserPassword") {
+		t.Error(".env has a SeedUserPassword without password sign-in")
+	}
+
+	// without Apple, no route skips the CSRF check
+	o.AuthMethods = []options.AuthMethod{options.Google}
+	p = mustBuild(t, o, "/work/demo-app")
+	if strings.Contains(string(p["internal/app/app.go"]), "AddInsecureBypassPattern") || strings.Contains(string(p["internal/app/app.go"]), "POST /auth/{provider}/callback") {
+		t.Error("the CSRF exemption is there without Apple")
 	}
 }

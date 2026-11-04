@@ -28,8 +28,19 @@ var modules = map[string][]string{
 	"mysql":         {"gorm.io/driver/mysql@latest", "github.com/go-sql-driver/mysql@latest"},
 }
 
-// authModules are updated to their latest version when built-in auth is chosen.
-var authModules = []string{"github.com/alexedwards/scs/v2@latest", "golang.org/x/crypto@latest"}
+// Modules updated to their latest version for the sign-in methods.
+var (
+	passwordModules = []string{"github.com/alexedwards/scs/v2@latest", "golang.org/x/crypto@latest"}
+	oauthModules    = []string{"github.com/alexedwards/scs/v2@latest", "golang.org/x/oauth2@latest", "github.com/coreos/go-oidc/v3@latest"}
+)
+
+// dbKey is the database part of a DepsKey ("sqlite-purego-auth-oauth-noe2e" -> "sqlite-purego").
+func dbKey(key string) string {
+	if i := strings.Index(key, "-auth"); i >= 0 {
+		key = key[:i]
+	}
+	return strings.TrimSuffix(key, "-noe2e")
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -78,9 +89,12 @@ func run() error {
 			return err
 		}
 
-		mods := modules[strings.TrimSuffix(strings.TrimSuffix(key, "-noe2e"), "-auth")]
-		if o.Auth == options.BuiltinAuth {
-			mods = append(mods, authModules...)
+		mods := append([]string{}, modules[dbKey(key)]...)
+		if o.HasMethod(options.Password) {
+			mods = append(mods, passwordModules...)
+		}
+		if o.HasOAuth() {
+			mods = append(mods, oauthModules...)
 		}
 		if len(mods) > 0 {
 			if err := goCmd(dir, append([]string{"get"}, mods...)...); err != nil {

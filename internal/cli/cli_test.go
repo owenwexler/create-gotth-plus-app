@@ -313,7 +313,7 @@ func TestAuthFlag(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
-	if !strings.Contains(out, "Auth                 Built-in: email and password") || !strings.Contains(out, "dev@example.com") {
+	if !strings.Contains(out, "Auth                 Built-in: Email and password") || !strings.Contains(out, "dev@example.com") {
 		t.Errorf("output:\n%s", out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "app", "internal", "auth", "session.go")); err != nil {
@@ -321,5 +321,28 @@ func TestAuthFlag(t *testing.T) {
 	}
 	if code, _, errOut := runCLI(t, t.TempDir(), "--yes", "--auth=clerk", "app"); code != exitError || !strings.Contains(errOut, "unknown auth") {
 		t.Errorf("--auth=clerk: exit %d, %q", code, errOut)
+	}
+}
+
+func TestAuthMethodsFlag(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "--auth=builtin", "--auth-methods=github,apple", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "Built-in: GitHub, Apple") || !strings.Contains(out, "sign-in providers: register an app") || strings.Contains(out, "make seed") {
+		t.Errorf("output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "app", "internal", "auth", "oauth.go")); err != nil {
+		t.Error("no OAuth code")
+	}
+	for _, args := range [][]string{
+		{"--yes", "--auth=none", "--auth-methods=google", "app"},
+		{"--yes", "--auth=builtin", "--auth-methods=facebook", "app"},
+		{"--yes", "--auth=builtin", "--auth-methods=", "app"},
+	} {
+		if code, _, _ := runCLI(t, t.TempDir(), args...); code != exitError {
+			t.Errorf("%v: exit %d, want an error", args, code)
+		}
 	}
 }

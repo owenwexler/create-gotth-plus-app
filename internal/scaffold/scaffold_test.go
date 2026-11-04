@@ -187,16 +187,23 @@ func TestGeneratedProjectBuilds(t *testing.T) {
 			}
 			t.Run(name, func(t *testing.T) { testGeneratedProject(t, c.db, c.driver, c.serverEnv, e2e, options.NoAuth) })
 		}
-		// built-in auth on every database, and once without the E2E tests
-		t.Run(c.name+"-auth", func(t *testing.T) { testGeneratedProject(t, c.db, c.driver, c.serverEnv, true, options.BuiltinAuth) })
+		// built-in auth with every method on every database, and a few other sets below
+		t.Run(c.name+"-auth-all", func(t *testing.T) {
+			testGeneratedProject(t, c.db, c.driver, c.serverEnv, true, options.BuiltinAuth, options.AuthMethodList...)
+		})
 	}
-	t.Run("sqlite-purego-auth-noe2e", func(t *testing.T) {
-		testGeneratedProject(t, options.SQLite, options.PureGo, "", false, options.BuiltinAuth)
+	t.Run("sqlite-purego-auth-password-noe2e", func(t *testing.T) {
+		testGeneratedProject(t, options.SQLite, options.PureGo, "", false, options.BuiltinAuth, options.Password)
 	})
+	for _, m := range []options.AuthMethod{options.Google, options.GitHub, options.Apple} {
+		t.Run("sqlite-purego-auth-"+string(m), func(t *testing.T) {
+			testGeneratedProject(t, options.SQLite, options.PureGo, "", true, options.BuiltinAuth, m)
+		})
+	}
 }
 
 // testGeneratedProject generates one project and checks it the way a user would build it.
-func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool, a options.Auth) {
+func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool, a options.Auth, methods ...options.AuthMethod) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
 	o := testOptions()
@@ -204,6 +211,9 @@ func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLi
 	o.Database, o.SQLiteDriver = db, driver
 	o.E2E, o.Axe = e2e, e2e
 	o.Auth = a
+	if len(methods) > 0 {
+		o.AuthMethods = methods
+	}
 	if err := mustBuild(t, o, dir).Write(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -381,6 +391,21 @@ func TestDepsNotOlderThanTemplate(t *testing.T) {
 			t.Errorf("_deps/%s/go.mod has module %q, want the template's", key, modfile.ModulePath(b))
 		}
 	}
+
+	// every folder in _deps belongs to a current choice, so renamed keys don't leave stale sets
+	keys := map[string]bool{}
+	for _, o := range DepsChoices() {
+		keys[DepsKey(o)] = true
+	}
+	entries, err := fs.ReadDir(embedded, "_deps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.IsDir() && !keys[e.Name()] {
+			t.Errorf("_deps/%s is not used by any choice: delete it", e.Name())
+		}
+	}
 }
 
 func requires(t *testing.T, gomod []byte) map[string]string {
@@ -402,7 +427,7 @@ func TestOverlayRefusesChangedTemplateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	p["internal/database/database.go"] = append(p["internal/database/database.go"], "// changed upstream\n"...)
-	if err := p.overlay("postgres"); err == nil || !strings.Contains(err.Error(), "changed") {
+	if _, err := p.overlay("postgres"); err == nil || !strings.Contains(err.Error(), "changed") {
 		t.Errorf("overlay = %v, want an error about the changed template file", err)
 	}
 }

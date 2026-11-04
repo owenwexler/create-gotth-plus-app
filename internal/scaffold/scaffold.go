@@ -296,7 +296,7 @@ func setEnv(p Project, opts options.Options) error {
 		}
 		env = strings.Replace(env, "\nSeedAdminKey=\n", "\nSeedAdminKey="+key+"\n", 1)
 	}
-	if opts.Auth == options.BuiltinAuth {
+	if opts.HasMethod(options.Password) {
 		// the development account's password: 24 random hex characters (at least 15 are required)
 		pw, err := randomHex(12)
 		if err != nil {

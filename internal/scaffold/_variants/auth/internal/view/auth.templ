@@ -104,18 +104,43 @@ templ AuthNotice(title, body, linkHref, linkText string) {
 	</div>
 }
 
-templ LoginPage(next string) {
+// LoginPage offers what opts says: provider buttons, the password form, or both. The provider
+// buttons are plain links (GET), so the redirect to the provider isn't subject to form-action 'self'.
+templ LoginPage(opts LoginOptions) {
 	@authPage("Sign in") {
-		@authForm("/login") {
-			<input type="hidden" name="next" value={ next }/>
-			@field("email", "Email", "email", "email", "320")
-			@field("password", "Password", "password", "current-password", "256")
-			@submitButton("Sign in")
+		if len(opts.Providers) > 0 {
+			<div class="flex flex-col gap-3">
+				for _, p := range opts.Providers {
+					<a href={ templ.URL(providerLoginURL(p.Name, opts.Next)) } class={ styles.GenerateBigButtonClasses(), "text-center" }>Continue with { p.Label }</a>
+				}
+			</div>
 		}
-		<div class="flex flex-col gap-2 text-sm text-neutral-300">
-			<a href="/forgot-password" class={ styles.GenerateLinkButtonClasses(), "self-start" }>Forgot your password?</a>
-			<p>No account yet? <a href="/signup" class={ styles.GenerateLinkButtonClasses() }>Create one</a></p>
-		</div>
+		if opts.Password {
+			if len(opts.Providers) > 0 {
+				<p class="text-center text-xs tracking-wide text-neutral-400 uppercase">or</p>
+			}
+			@authForm("/login") {
+				<input type="hidden" name="next" value={ opts.Next }/>
+				@field("email", "Email", "email", "email", "320")
+				@field("password", "Password", "password", "current-password", "256")
+				@submitButton("Sign in")
+			}
+			<div class="flex flex-col gap-2 text-sm text-neutral-300">
+				<a href="/forgot-password" class={ styles.GenerateLinkButtonClasses(), "self-start" }>Forgot your password?</a>
+				<p>No account yet? <a href="/signup" class={ styles.GenerateLinkButtonClasses() }>Create one</a></p>
+			</div>
+		}
+		if !opts.Password && len(opts.Providers) == 0 {
+			<p class="text-sm leading-relaxed text-neutral-300">No sign-in method is set up yet. See the sign-in settings in .env.example.</p>
+		}
+	}
+}
+
+// SignInFailedPage says why signing in with a provider didn't work.
+templ SignInFailedPage(title, body string) {
+	@authPage(title) {
+		<p class="text-sm leading-relaxed text-neutral-300">{ body }</p>
+		<a href="/login" class={ styles.GenerateLinkButtonClasses(), "self-start text-sm" }>Back to sign in</a>
 	}
 }
 

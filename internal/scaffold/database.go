@@ -30,6 +30,12 @@ func DepsKey(o options.Options) string {
 	}
 	if o.Auth == options.BuiltinAuth {
 		key += "-auth" // scs
+		if o.HasMethod(options.Password) {
+			key += "-password"
+		}
+		if o.HasOAuth() {
+			key += "-oauth" // x/oauth2 and go-oidc, whichever providers
+		}
 	}
 	if !o.E2E {
 		key += "-noe2e" // no playwright-go
@@ -49,11 +55,16 @@ func DepsChoices() []options.Options {
 		{options.Postgres, options.PureGo},
 		{options.MySQL, options.PureGo},
 	} {
-		for _, a := range []options.Auth{options.NoAuth, options.BuiltinAuth} {
+		// no auth, then each set of sign-in methods with its own dependencies
+		authChoices := [][]options.AuthMethod{nil, {options.Password}, {options.Google, options.GitHub, options.Apple}, options.AuthMethodList}
+		for _, methods := range authChoices {
 			for _, e2e := range []bool{true, false} {
 				o := options.Defaults()
-				o.Database, o.SQLiteDriver, o.E2E, o.Auth = db.db, db.driver, e2e, a
+				o.Database, o.SQLiteDriver, o.E2E = db.db, db.driver, e2e
 				o.Axe = e2e
+				if methods != nil {
+					o.Auth, o.AuthMethods = options.BuiltinAuth, methods
+				}
 				all = append(all, o)
 			}
 		}
@@ -148,7 +159,7 @@ func serverDatabase(p Project, d options.Database, mod, dbName string) error {
 	s := servers[d]
 
 	// database.go is replaced, and dbtest added, from _variants/<database>
-	if err := p.overlay(string(d)); err != nil {
+	if _, err := p.overlay(string(d)); err != nil {
 		return err
 	}
 
@@ -256,11 +267,13 @@ func (p Project) edits(es []edit) error {
 	return nil
 }
 
-// overlay copies _variants/<name> over the project. A file that replaces a template file must be
-// listed in replacedFiles, and the template file must still have the recorded hash.
-func (p Project) overlay(name string) error {
+// overlay copies _variants/<name> over the project and returns the paths it wrote. A file that
+// replaces a template file must be listed in replacedFiles, and the template file must still have
+// the recorded hash.
+func (p Project) overlay(name string) ([]string, error) {
 	root := "_variants/" + name
-	return fs.WalkDir(embedded, root, func(path string, d fs.DirEntry, err error) error {
+	var written []string
+	err := fs.WalkDir(embedded, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -275,6 +288,8 @@ func (p Project) overlay(name string) error {
 			return err
 		}
 		p[rel] = b
+		written = append(written, rel)
 		return nil
 	})
+	return written, err
 }

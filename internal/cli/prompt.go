@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strconv"
 
@@ -78,12 +79,30 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 	if !given["auth"] {
 		groups = append(groups, huh.NewGroup(huh.NewSelect[options.Auth]().
 			Title("Sign-in").
-			Description("Built-in: email and password with argon2id, server-side sessions, confirmation and reset emails.").
+			Description("Built-in: server-side sessions in the app, with a password and/or Google, GitHub or Apple.").
 			Options(
 				huh.NewOption("None", options.NoAuth),
-				huh.NewOption("Built-in: email and password", options.BuiltinAuth),
+				huh.NewOption("Built-in", options.BuiltinAuth),
 			).
 			Value(&o.Auth)))
+	}
+	if !given["auth-methods"] {
+		methodOptions := make([]huh.Option[options.AuthMethod], len(options.AuthMethodList))
+		for i, m := range options.AuthMethodList {
+			methodOptions[i] = huh.NewOption(m.Label(), m).Selected(m == options.Password)
+		}
+		groups = append(groups, huh.NewGroup(huh.NewMultiSelect[options.AuthMethod]().
+			Title("Sign-in methods").
+			Description("Pick one or more. Google, GitHub and Apple each need an app registered with them; keys go in .env.").
+			Options(methodOptions...).
+			Validate(func(ms []options.AuthMethod) error {
+				if len(ms) == 0 {
+					return errors.New("choose at least one sign-in method")
+				}
+				return nil
+			}).
+			Value(&o.AuthMethods)).
+			WithHideFunc(func() bool { return o.Auth != options.BuiltinAuth }))
 	}
 	if !given["db"] {
 		dbOptions := make([]huh.Option[options.Database], len(options.Databases))

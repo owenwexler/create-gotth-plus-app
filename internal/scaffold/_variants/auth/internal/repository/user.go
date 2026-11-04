@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,13 +57,18 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (model.Us
 	return r.first(ctx, "email = ?", email)
 }
 
+// first finds one user. Find with Limit, rather than First, because "no such user" is routine
+// here (sign-up, sign-in with an unknown email) and First makes GORM log it as an error.
 func (r *userRepository) first(ctx context.Context, query string, arg any) (model.User, error) {
 	var user model.User
-	err := r.db.WithContext(ctx).Where(query, arg).First(&user).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	res := r.db.WithContext(ctx).Where(query, arg).Limit(1).Find(&user)
+	if res.Error != nil {
+		return model.User{}, res.Error
+	}
+	if res.RowsAffected == 0 {
 		return model.User{}, ErrNotFound
 	}
-	return user, err
+	return user, nil
 }
 
 func (r *userRepository) SetPassword(ctx context.Context, id uuid.UUID, hash string, signOutEverywhere bool) error {

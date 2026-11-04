@@ -32,7 +32,8 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--module` | `github.com/<git config github.user>/<name>`, or `<name>` | Go module path |
 | `--port` | `3000` | Development port (`.env`) |
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
-| `--auth` | `none` | `none`, or `builtin`: email and password with argon2id, server-side sessions, confirmation and reset emails |
+| `--auth` | `none` | `none`, or `builtin`: sign-in in the app itself, on server-side sessions |
+| `--auth-methods` | `password` | With `--auth=builtin`: any of `password` (argon2id, confirmation and reset emails), `google`, `github`, `apple` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
 | `--e2e` | `true` | Include the Playwright end-to-end tests (`--e2e=false` removes them, their make targets and dependency) |
@@ -49,7 +50,10 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--skip-checks` | | Don't check that the needed tools are installed |
 | `--version` | | Print the CLI and template versions |
 
-More sign-in options (Google, GitHub, Apple, OIDC, Supabase) are coming; see `SPEC.md`.
+More sign-in options (OIDC providers such as WorkOS, Logto and Kinde, and Supabase) are coming; see `SPEC.md`.
+
+Google, GitHub and Apple sign-in come with a fake provider in the generated tests, so the whole flow
+(state, nonce, PKCE, account linking, Apple's cross-site POST) is tested without a network.
 
 Every project gets a fixed `air.toml` (gotth-plus's runs no `templ generate`, and `make air` didn't
 pass `-c air.toml`, so air ignored it) with air's browser-reloading proxy on port 7331.

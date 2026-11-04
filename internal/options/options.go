@@ -26,6 +26,8 @@ type Options struct {
 	SeedAdminKey bool
 	// Auth is how people sign in.
 	Auth Auth
+	// AuthMethods are the ways to sign in with built-in auth, in AuthMethodList order.
+	AuthMethods []AuthMethod
 	// Database is the database the app uses.
 	Database Database
 	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
@@ -100,12 +102,92 @@ func ParseAuth(s string) (Auth, error) {
 	return "", fmt.Errorf("unknown auth %q; use none or builtin", s)
 }
 
-// Label is the auth choice's display name.
-func (a Auth) Label() string {
-	if a == BuiltinAuth {
-		return "Built-in: email and password"
+// AuthMethod is one way to sign in with built-in auth.
+type AuthMethod string
+
+const (
+	Password AuthMethod = "password"
+	Google   AuthMethod = "google"
+	GitHub   AuthMethod = "github"
+	Apple    AuthMethod = "apple"
+)
+
+// AuthMethodList is every method, in the order they are offered and shown.
+var AuthMethodList = []AuthMethod{Password, Google, GitHub, Apple}
+
+// Label is the method's display name.
+func (m AuthMethod) Label() string {
+	switch m {
+	case Password:
+		return "Email and password"
+	case Google:
+		return "Google"
+	case GitHub:
+		return "GitHub"
+	case Apple:
+		return "Apple"
 	}
-	return "None"
+	return string(m)
+}
+
+// ParseAuthMethods reads an --auth-methods value such as "password,google". The result is in
+// AuthMethodList order, without duplicates.
+func ParseAuthMethods(s string) ([]AuthMethod, error) {
+	want := map[AuthMethod]bool{}
+	for _, part := range strings.Split(s, ",") {
+		m := AuthMethod(strings.TrimSpace(part))
+		if m == "" {
+			continue
+		}
+		known := false
+		for _, k := range AuthMethodList {
+			known = known || k == m
+		}
+		if !known {
+			return nil, fmt.Errorf("unknown sign-in method %q; use password, google, github or apple", m)
+		}
+		want[m] = true
+	}
+	var methods []AuthMethod
+	for _, m := range AuthMethodList {
+		if want[m] {
+			methods = append(methods, m)
+		}
+	}
+	if len(methods) == 0 {
+		return nil, errors.New("choose at least one sign-in method")
+	}
+	return methods, nil
+}
+
+// HasMethod reports whether built-in auth signs in with m.
+func (o Options) HasMethod(m AuthMethod) bool {
+	if o.Auth != BuiltinAuth {
+		return false
+	}
+	for _, have := range o.AuthMethods {
+		if have == m {
+			return true
+		}
+	}
+	return false
+}
+
+// HasOAuth reports whether any sign-in provider (Google, GitHub, Apple) is chosen.
+func (o Options) HasOAuth() bool {
+	return o.HasMethod(Google) || o.HasMethod(GitHub) || o.HasMethod(Apple)
+}
+
+// AuthLabel describes the auth choice, with its methods.
+func (o Options) AuthLabel() string {
+	if o.Auth != BuiltinAuth {
+		return "None"
+	}
+	labels := make([]string, len(o.AuthMethods))
+	for i, m := range o.AuthMethods {
+		labels[i] = m.Label()
+	}
+	return "Built-in: " + strings.Join(labels, ", ")
 }
 
 // LiveReload is a live-reload tool for make dev.
@@ -162,6 +244,7 @@ func Defaults() Options {
 		Port:         3000,
 		SeedAdminKey: true,
 		Auth:         NoAuth,
+		AuthMethods:  []AuthMethod{Password},
 		Database:     SQLite,
 		SQLiteDriver: PureGo,
 		E2E:          true,
@@ -285,6 +368,15 @@ func (o Options) Validate() error {
 	}
 	if _, err := ParseAuth(string(o.Auth)); err != nil {
 		return err
+	}
+	if o.Auth == BuiltinAuth {
+		names := make([]string, len(o.AuthMethods))
+		for i, m := range o.AuthMethods {
+			names[i] = string(m)
+		}
+		if _, err := ParseAuthMethods(strings.Join(names, ",")); err != nil {
+			return err
+		}
 	}
 	if _, err := ParseLiveReload(string(o.LiveReload)); err != nil {
 		return err

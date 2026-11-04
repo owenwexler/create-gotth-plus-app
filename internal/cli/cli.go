@@ -59,6 +59,7 @@ type flags struct {
 	port         int
 	seedAdminKey bool
 	auth         string
+	authMethods  string
 	db           string
 	sqliteDriver string
 
@@ -85,6 +86,7 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.IntVar(&f.port, "port", defaults.Port, "development port")
 	fs.BoolVar(&f.seedAdminKey, "seed-admin-key", defaults.SeedAdminKey, "write a random SeedAdminKey into .env (--seed-admin-key=false to skip)")
 	fs.StringVar(&f.auth, "auth", string(defaults.Auth), "sign-in: none, or builtin (email and password, server-side sessions)")
+	fs.StringVar(&f.authMethods, "auth-methods", "password", "with --auth=builtin, the sign-in methods: any of password, google, github, apple (comma-separated)")
 	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
 	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
 	fs.BoolVar(&f.e2e, "e2e", defaults.E2E, "include the Playwright end-to-end (browser) tests")
@@ -187,6 +189,12 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	opts.SeedAdminKey = f.seedAdminKey
 	if opts.Auth, err = options.ParseAuth(f.auth); err != nil {
 		return err
+	}
+	if opts.AuthMethods, err = options.ParseAuthMethods(f.authMethods); err != nil {
+		return err
+	}
+	if f.set["auth-methods"] && f.set["auth"] && opts.Auth != options.BuiltinAuth {
+		return errors.New("--auth-methods only applies to --auth=builtin")
 	}
 	if opts.Database, err = options.ParseDatabase(f.db); err != nil {
 		return err
@@ -326,7 +334,7 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 	rows := [][2]string{
 		{"Directory", dir},
 		{"Module path", o.ModulePath},
-		{"Auth", o.Auth.Label()},
+		{"Auth", o.AuthLabel()},
 		{"Database", o.DatabaseLabel()},
 		{"Port", strconv.Itoa(o.Port)},
 		{"E2E tests", yesNo(o.E2E)},
@@ -365,7 +373,10 @@ func printNextSteps(w io.Writer, o options.Options, dir string, stepsOK bool) {
 		fmt.Fprintf(w, "  make setup    # Go modules, the JS libraries, the test browser, a first build\n")
 	}
 	fmt.Fprintf(w, "  make dev      # live reload at http://localhost:7331\n")
-	if o.Auth == options.BuiltinAuth {
+	if o.HasOAuth() {
+		fmt.Fprintf(w, "  # sign-in providers: register an app with each and put its keys in .env (README: \"Sign-in providers\")\n")
+	}
+	if o.HasMethod(options.Password) {
 		fmt.Fprintf(w, "  make seed     # with make dev running: sample data, and dev@example.com (password: SeedUserPassword in .env)\n")
 	}
 	fmt.Fprintln(w)

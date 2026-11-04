@@ -99,3 +99,24 @@ func TestDefaultModulePath(t *testing.T) {
 		t.Errorf("without user: got %q", got)
 	}
 }
+
+func TestParseAuthMethods(t *testing.T) {
+	got, err := ParseAuthMethods(" apple,password,apple ,google")
+	if err != nil || len(got) != 3 || got[0] != Password || got[1] != Google || got[2] != Apple {
+		t.Errorf("ParseAuthMethods = %v, %v", got, err)
+	}
+	for _, bad := range []string{"", ",", "password,facebook"} {
+		if _, err := ParseAuthMethods(bad); err == nil {
+			t.Errorf("ParseAuthMethods(%q) = nil error", bad)
+		}
+	}
+	o := Defaults()
+	o.Auth, o.AuthMethods = BuiltinAuth, []AuthMethod{GitHub}
+	if !o.HasOAuth() || o.HasMethod(Password) || o.AuthLabel() != "Built-in: GitHub" {
+		t.Errorf("HasOAuth %v, password %v, label %q", o.HasOAuth(), o.HasMethod(Password), o.AuthLabel())
+	}
+	o.Auth = NoAuth
+	if o.HasOAuth() {
+		t.Error("no auth has OAuth")
+	}
+}
