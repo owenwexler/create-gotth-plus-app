@@ -96,6 +96,24 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			WithHideFunc(func() bool { return o.Database != options.SQLite }))
 	}
 
+	var after []huh.Field
+	for _, q := range []struct {
+		flag, title, desc string
+		value             *bool
+	}{
+		{"js", "Download and commit the JS libraries?", "htmx, Alpine (CSP build) and hx-optimistic, with their versions and SHA-384 hashes recorded in README.md, so production serves reviewed copies.", &o.CommitJS},
+		{"axe", "Download axe-core for the accessibility test?", "From the npm registry, checked against its sha512 hash. Without it, the axe scan in the E2E tests is skipped.", &o.Axe},
+		{"git", "Initialize git and make a first commit?", "Skipped when the project is inside an existing repository.", &o.Git},
+		{"setup", "Run make setup now?", "Downloads the Go modules, the JS libraries and Chromium for the E2E tests (a few hundred MB), and builds once.", &o.Setup},
+	} {
+		if !given[q.flag] {
+			after = append(after, huh.NewConfirm().Title(q.title).Description(q.desc).Value(q.value))
+		}
+	}
+	if len(after) > 0 {
+		groups = append(groups, huh.NewGroup(after...).Title("After creating the project"))
+	}
+
 	if len(groups) == 0 {
 		return nil
 	}

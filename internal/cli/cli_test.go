@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/owenwexler/create-gotth-plus-app/internal/options"
+	"github.com/owenwexler/create-gotth-plus-app/internal/post"
 	"github.com/owenwexler/create-gotth-plus-app/internal/prereq"
 )
 
@@ -20,7 +22,17 @@ var noTools = prereq.Runner{
 	},
 }
 
-// runCLI runs the CLI in dir with no terminal attached and no tools installed.
+// noPost records the options the after-creation steps were given, instead of running them.
+type noPost struct{ got *options.Options }
+
+func (n noPost) RunAll(_ context.Context, _ string, o options.Options) []post.Outcome {
+	if n.got != nil {
+		*n.got = o
+	}
+	return nil
+}
+
+// runCLI runs the CLI in dir with no terminal attached, no tools installed and no after-creation steps.
 func runCLI(t *testing.T, dir string, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
@@ -30,6 +42,7 @@ func runCLI(t *testing.T, dir string, args ...string) (code int, stdout, stderr 
 		Err:   &errOut,
 		Getwd: func() (string, error) { return dir, nil },
 		Tools: &noTools,
+		Post:  noPost{},
 	})
 	return code, out.String(), errOut.String()
 }
@@ -172,5 +185,74 @@ func TestVersion(t *testing.T) {
 	code, out, _ := runCLI(t, t.TempDir(), "--version")
 	if code != exitOK || !strings.Contains(out, "gotth-plus ") {
 		t.Errorf("exit %d, output %q", code, out)
+	}
+}
+
+func runWithPost(t *testing.T, dir string, p PostSteps, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), args, IO{
+		In: strings.NewReader(""), Out: &out, Err: &errOut,
+		Getwd: func() (string, error) { return dir, nil },
+		Tools: &noTools,
+		Post:  p,
+	})
+	return code, out.String(), errOut.String()
+}
+
+func TestAfterCreationFlags(t *testing.T) {
+	var got options.Options
+	code, out, errOut := runWithPost(t, t.TempDir(), noPost{&got}, "--yes", "--js=false", "--setup=false", "app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if got.CommitJS || got.Setup || !got.Axe || !got.Git {
+		t.Errorf("post steps got %+v", got)
+	}
+	if !strings.Contains(out, "make setup    #") {
+		t.Errorf("next steps should say make setup when it didn't run:\n%s", out)
+	}
+
+	_, out, _ = runWithPost(t, t.TempDir(), noPost{&got}, "--yes", "app")
+	if !got.CommitJS || !got.Setup {
+		t.Errorf("defaults: post steps got %+v", got)
+	}
+	if strings.Contains(out, "make setup    #") {
+		t.Errorf("next steps repeat make setup after it ran:\n%s", out)
+	}
+}
+
+func TestNoGitInNonEmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mine.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var got options.Options
+	code, out, _ := runWithPost(t, dir, noPost{&got}, "--yes", "--force", ".")
+	if code != exitOK || got.Git {
+		t.Errorf("exit %d, git %v", code, got.Git)
+	}
+	if !strings.Contains(out, "Not running git init") {
+		t.Errorf("no explanation:\n%s", out)
+	}
+}
+
+type failingPost struct{}
+
+func (failingPost) RunAll(context.Context, string, options.Options) []post.Outcome {
+	return []post.Outcome{{Step: "make setup", Err: errors.New("exit status 2"), Fix: "make setup"}}
+}
+
+func TestFailedStepExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	code, out, errOut := runWithPost(t, dir, failingPost{}, "--yes", "app")
+	if code != exitError || !strings.Contains(errOut, "the project was created") {
+		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+	if !strings.Contains(out, "Run by hand: make setup") || !strings.Contains(out, "make setup    #") {
+		t.Errorf("output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "app", "go.mod")); err != nil {
+		t.Error("the project should stay")
 	}
 }

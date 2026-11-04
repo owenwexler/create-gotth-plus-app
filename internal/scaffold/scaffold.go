@@ -135,6 +135,12 @@ func build(fsys fs.FS, opts options.Options, dir string, withDeps bool) (Project
 			}
 			return applyDeps(p, depsKey(opts))
 		}},
+		{"JS libraries", func() error {
+			if !opts.CommitJS {
+				return nil
+			}
+			return commitJS(p)
+		}},
 		{"module path", func() error { return rewriteModule(p, opts.ModulePath) }},
 		{"project name", func() error { return setProjectName(p, name, version) }},
 		{"environment", func() error { return setEnv(p, opts) }},

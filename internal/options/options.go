@@ -28,6 +28,18 @@ type Options struct {
 	Database Database
 	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
 	SQLiteDriver SQLiteDriver
+
+	// What happens after the files are written.
+
+	// CommitJS downloads htmx, Alpine (CSP) and hx-optimistic, records their versions and hashes,
+	// and stops git-ignoring them, so they are committed.
+	CommitJS bool
+	// Axe downloads axe-core for the accessibility test.
+	Axe bool
+	// Git runs git init and makes a first commit.
+	Git bool
+	// Setup runs make setup (Go modules, JS libraries, the test browser, a first build).
+	Setup bool
 }
 
 // Database is a supported database.
@@ -94,6 +106,10 @@ func Defaults() Options {
 		SeedAdminKey: true,
 		Database:     SQLite,
 		SQLiteDriver: PureGo,
+		CommitJS:     true,
+		Axe:          true,
+		Git:          true,
+		Setup:        true,
 	}
 }
 

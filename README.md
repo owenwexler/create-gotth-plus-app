@@ -14,6 +14,10 @@ create-gotth-plus-app my-app
 It asks for anything you don't pass as a flag, shows a summary, and writes the project. Nothing is
 written if you cancel.
 
+After writing the files it runs the steps you chose (`make setup`, the downloads, git). A step that
+fails doesn't stop the others or remove the project: the CLI says what to run by hand and exits
+with status 1.
+
 Before you confirm, it checks the tools the project needs: Go (at least the version in the template's
 `go.mod`), templ (the same version as the template's `go.mod`), the Tailwind CSS v4 standalone CLI,
 `make`, `bash`, `git`, `curl`, `openssl`, and a C compiler for the CGO SQLite driver. A missing or
@@ -30,6 +34,10 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
+| `--js` | `true` | Download htmx, Alpine (CSP) and hx-optimistic, record versions and SHA-384 hashes in the README, and commit them |
+| `--axe` | `true` | Download axe-core (sha512-verified, from the npm registry) for the accessibility test |
+| `--git` | `true` | `git init` and a first commit (skipped inside an existing repository or a non-empty directory) |
+| `--setup` | `true` | Run `make setup` (Go modules, JS libraries, Chromium for the E2E tests, a first build) |
 | `--yes`, `-y` | | Ask nothing: flags, then defaults (for CI and AI agents) |
 | `--force` | | Write into a directory that is not empty |
 | `--accessible` | `$ACCESSIBLE` | Plain prompts for screen readers |

@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/owenwexler/create-gotth-plus-app/internal/options"
+	"github.com/owenwexler/create-gotth-plus-app/internal/post"
 	"github.com/owenwexler/create-gotth-plus-app/internal/prereq"
 	"github.com/owenwexler/create-gotth-plus-app/internal/scaffold"
 )
@@ -41,6 +42,13 @@ type IO struct {
 	Getwd func() (string, error)
 	// Tools finds the prerequisite tools; nil means the real PATH.
 	Tools *prereq.Runner
+	// Post runs the steps after the files are written; nil means the real ones.
+	Post PostSteps
+}
+
+// PostSteps runs the after-creation steps (see package post).
+type PostSteps interface {
+	RunAll(ctx context.Context, dir string, o options.Options) []post.Outcome
 }
 
 // flags are the parsed command-line flags, plus which ones were given (so prompts can skip them).
@@ -52,6 +60,8 @@ type flags struct {
 	seedAdminKey bool
 	db           string
 	sqliteDriver string
+
+	js, axe, git, setup bool
 
 	set  map[string]bool
 	name string // the positional project name, if any
@@ -74,6 +84,10 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&f.seedAdminKey, "seed-admin-key", defaults.SeedAdminKey, "write a random SeedAdminKey into .env (--seed-admin-key=false to skip)")
 	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
 	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
+	fs.BoolVar(&f.js, "js", defaults.CommitJS, "download htmx, Alpine (CSP) and hx-optimistic, record their versions and hashes, and commit them")
+	fs.BoolVar(&f.axe, "axe", defaults.Axe, "download axe-core for the accessibility test")
+	fs.BoolVar(&f.git, "git", defaults.Git, "git init and make a first commit")
+	fs.BoolVar(&f.setup, "setup", defaults.Setup, "run make setup (Go modules, JS libraries, test browser, first build)")
 
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: create-gotth-plus-app [flags] [project-name]\n\n")
@@ -170,6 +184,7 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	if opts.SQLiteDriver, err = options.ParseSQLiteDriver(f.sqliteDriver); err != nil {
 		return err
 	}
+	opts.CommitJS, opts.Axe, opts.Git, opts.Setup = f.js, f.axe, f.git, f.setup
 	if f.set["sqlite-driver"] && f.set["db"] && opts.Database != options.SQLite {
 		return errors.New("--sqlite-driver only applies to --db=sqlite")
 	}
@@ -203,6 +218,11 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 	}
 
 	dir := dirFor(opts.Name)
+	// git add -A would commit whatever was already in a directory written into with --force
+	if opts.Git && !isEmptyDir(dir) {
+		opts.Git = false
+		fmt.Fprintf(stdio.Out, "\nNot running git init: %s already has files in it.\n", dir)
+	}
 	printSummary(stdio.Out, opts, dir, scaffold.TemplateVersion(tmpl))
 	if !f.skipChecks {
 		if err := checkTools(ctx, stdio, tmpl, opts); err != nil {
@@ -227,8 +247,25 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 		return fmt.Errorf("write project: %w", err)
 	}
 
-	printNextSteps(stdio.Out, opts, dir)
+	steps := stdio.Post
+	if steps == nil {
+		steps = post.System(stdio.Out)
+	}
+	allOK := post.Report(stdio.Out, steps.RunAll(ctx, dir, opts))
+
+	printNextSteps(stdio.Out, opts, dir, allOK)
+	if !allOK {
+		return errStepsFailed
+	}
 	return nil
+}
+
+var errStepsFailed = errors.New("the project was created, but some after-creation steps failed (see above)")
+
+// isEmptyDir reports whether dir is missing or has no entries.
+func isEmptyDir(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return err != nil || len(entries) == 0
 }
 
 // checkTools reports missing or unsuitable tools. They are warnings: only reading the template's
@@ -269,6 +306,10 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 		{"Database", o.DatabaseLabel()},
 		{"Port", strconv.Itoa(o.Port)},
 		{"Random SeedAdminKey", yesNo(o.SeedAdminKey)},
+		{"Commit JS libraries", yesNo(o.CommitJS)},
+		{"Download axe-core", yesNo(o.Axe)},
+		{"git init + commit", yesNo(o.Git)},
+		{"Run make setup", yesNo(o.Setup)},
 	}
 	for _, r := range rows {
 		fmt.Fprintf(w, "  %-20s %s\n", r[0], r[1])
@@ -284,15 +325,17 @@ func projectName(o options.Options, dir string) string {
 	return o.Name
 }
 
-func printNextSteps(w io.Writer, o options.Options, dir string) {
-	fmt.Fprintf(w, "Done. Next steps:\n\n")
+func printNextSteps(w io.Writer, o options.Options, dir string, stepsOK bool) {
+	fmt.Fprintf(w, "\nNext steps:\n\n")
 	if o.Name != "." {
 		fmt.Fprintf(w, "  cd %s\n", o.Name)
 	}
 	if cmd := scaffold.CreateDatabaseCommand(o.Database, options.DatabaseName(projectName(o, dir))); cmd != "" {
 		fmt.Fprintf(w, "  %s    # the development database; check DatabaseURL in .env\n", cmd)
 	}
-	fmt.Fprintf(w, "  make setup    # Go modules, the JS libraries, the test browser, a first build\n")
+	if !o.Setup || !stepsOK {
+		fmt.Fprintf(w, "  make setup    # Go modules, the JS libraries, the test browser, a first build\n")
+	}
 	fmt.Fprintf(w, "  make dev      # live reload at http://localhost:7331\n\n")
 	fmt.Fprintf(w, "Read AGENTS.md and SECURITY.md before you build on it.\n")
 }
