@@ -81,7 +81,7 @@ type recordedRequest struct {
 func newE2EApp(t *testing.T, env ...config.Env) *e2eApp {
 	t.Helper()
 
-	for _, lib := range []string{"htmx.min.js", "alpine-csp.min.js", "hx-optimistic.min.js"} {
+	for _, lib := range []string{"htmx.min.js", "htmx-ext-preload.min.js", "alpine-csp.min.js", "hx-optimistic.min.js"} {
 		if _, err := os.Stat("static/js/" + lib); err != nil {
 			t.Fatalf("static/js/%s is missing: run `make js` first", lib)
 		}

@@ -121,6 +121,7 @@ type library struct {
 
 var libraries = []library{
 	{"htmx.min.js", "htmx", "HTMX_VERSION", regexp.MustCompile(`(?m)^htmx (\S+)$`)},
+	{"htmx-ext-preload.min.js", "htmx preload extension", "PRELOAD_VERSION", regexp.MustCompile(`(?m)^htmx-ext-preload (\S+)$`)},
 	{"alpine-csp.min.js", "Alpine.js (CSP build)", "ALPINE_VERSION", regexp.MustCompile(`(?m)^alpine \(csp build\) (\S+)$`)},
 	{"hx-optimistic.min.js", "hx-optimistic", "HX_OPTIMISTIC_VERSION", regexp.MustCompile(`(?m)^hx-optimistic (\S+)$`)},
 }

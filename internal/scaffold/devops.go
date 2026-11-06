@@ -72,7 +72,7 @@ COPY . .
 
 # Production serves the committed, reviewed copies of the browser libraries and never downloads
 # them (SECURITY.md, "Frontend assets").
-RUN for f in htmx.min.js alpine-csp.min.js hx-optimistic.min.js; do \
+RUN for f in htmx.min.js htmx-ext-preload.min.js alpine-csp.min.js hx-optimistic.min.js; do \
       test -f "static/js/$f" || { echo "static/js/$f is missing: run make js, review and commit static/js" >&2; exit 1; }; \
     done
 

@@ -16,7 +16,7 @@ var replacedFiles = map[string]string{
 	"air.toml":                      "97d30276e3a1e649d03f82c483c8e18478821fbd23a83917dd991ebbf5d23579",
 	"internal/app/app.go":           "df426233cacb86db8fe80499978f38ba38d7f0f690669925b367ea436784d368",
 	"internal/view/pages.templ":     "1cbb98dfb1c14e4717c7fd6f4441ff9fbf42bf22e211fdc816ce1104100ecd56",
-	"internal/view/pages_templ.go":  "7ea89245860b9237cbff19e4500987f16ae9014aff7737c461a32eafd8e83f05",
+	"internal/view/pages_templ.go":  "5981d202c9c7cc121fef933f185d6ca25c9d047dfacb4f04b5a68320a40b7aa8",
 }
 
 // DepsKey names the go.mod/go.sum pair in _deps for o: the choices that change the dependencies.

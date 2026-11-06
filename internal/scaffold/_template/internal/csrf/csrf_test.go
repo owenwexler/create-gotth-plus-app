@@ -49,7 +49,7 @@ func TestMutations(t *testing.T) {
 		{"valid token", "POST", token, token, 204},
 		{"valid token on DELETE", "DELETE", token, token, 204},
 		{"missing header", "POST", token, "", 403},
-		{"wrong header", "PUT", token, "x" + token[1:], 403},
+		{"wrong header", "PUT", token, wrongToken(token), 403},
 		{"missing cookie", "POST", "", token, 403},
 		{"header without matching cookie", "POST", "short", "short", 403},
 	}
@@ -71,4 +71,14 @@ func TestMutations(t *testing.T) {
 			}
 		})
 	}
+}
+
+// wrongToken returns a token of the same length that differs from token. ("x" + token[1:] would
+// equal token whenever the random token already starts with "x".)
+func wrongToken(token string) string {
+	first := "x"
+	if token[0] == 'x' {
+		first = "y"
+	}
+	return first + token[1:]
 }
