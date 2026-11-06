@@ -1,0 +1,155 @@
+name: CI
+
+# Checks the CLI and, through its tests, the projects it generates. Actions and images use the same
+# pins as generated projects (internal/scaffold/pins.go; TestRepoWorkflowUsesPins keeps them equal).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: make test (with Postgres and MySQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      # the generated Postgres and MySQL projects run their own tests against these servers
+      CGPA_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      CGPA_TEST_MYSQL_URL: root:root@tcp(127.0.0.1:3306)/?parseTime=true&charset=utf8mb4&loc=UTC
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: make test
+
+  lint:
+    name: Format, vet, vulnerabilities, workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Dependencies match go.sum
+        run: go mod verify
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l main.go scripts internal/cli internal/options internal/post internal/prereq internal/scaffold/*.go)"
+          if [ -n "$unformatted" ]; then echo "not gofmt-formatted:"; echo "$unformatted"; exit 1; fi
+      - name: Vet
+        run: make vet
+      - name: Known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Generated workflows pass actionlint (with shellcheck)
+        run: |
+          make build
+          cli="$PWD/bin/create-gotth-plus-app"
+          out="$RUNNER_TEMP/lint"
+          mkdir -p "$out"
+          i=0
+          for args in "--db=sqlite" "--db=postgres --auth=supabase" "--db=mysql --e2e=false --js=false" "--sqlite-driver=cgo --docker=false --auth=builtin --auth-methods=password,apple"; do
+            i=$((i + 1))
+            # shellcheck disable=SC2086 # $args holds several flags on purpose
+            (cd "$out" && "$cli" --yes --skip-checks --axe=false --git=false --setup=false $args "p$i" >/dev/null)
+          done
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color .github/workflows/ci.yml "$out"/*/.github/workflows/ci.yml
+
+  docker:
+    name: Generated Dockerfiles build and run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build, run and probe each image
+        run: |
+          make build
+          cd "$RUNNER_TEMP"
+          for variant in "purego --sqlite-driver=purego" "cgo --sqlite-driver=cgo" "postgres --db=postgres"; do
+            name="${variant%% *}"
+            flags="${variant#* }"
+            # the JS libraries are downloaded (and would be committed), as the Dockerfile requires
+            # shellcheck disable=SC2086 # $flags holds several flags on purpose
+            "$GITHUB_WORKSPACE/bin/create-gotth-plus-app" --yes --skip-checks --e2e=false --git=false --setup=false $flags "app-$name"
+            docker build -t "app-$name" "app-$name"
+
+            user="$(docker image inspect --format '{{.Config.User}}' "app-$name")"
+            if [ "$user" != "65532:65532" ]; then echo "app-$name runs as '$user', not the non-root user"; exit 1; fi
+
+            if [ "$name" = postgres ]; then
+              continue # it needs a database to start; building it is the check
+            fi
+            # read-only root filesystem, the SQLite file on a volume (SECURITY.md, "Containers and hosting")
+            docker run -d --name "run-$name" --read-only -v "data-$name:/data" -p 18080:8080 "app-$name"
+            for _ in $(seq 1 30); do curl -fsS http://localhost:18080/healthz && break; sleep 1; done
+            curl -fsS http://localhost:18080/healthz
+            curl -fsS -o /dev/null http://localhost:18080/static/output.css
+            curl -fsS -o /dev/null http://localhost:18080/static/js/htmx.min.js
+            curl -fsSI http://localhost:18080/ | grep -i '^strict-transport-security'
+            docker rm -f "run-$name"
+          done
+
+  e2e:
+    name: A generated project's own make test (browser tests included)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Generate a project with every built-in sign-in method
+        run: |
+          make build
+          cli="$PWD/bin/create-gotth-plus-app"
+          cd "$RUNNER_TEMP"
+          "$cli" --yes --skip-checks --git=false --setup=false --auth=builtin --auth-methods=password,google,github,apple app
+      - name: Install templ (the project's version) and the Tailwind CSS standalone CLI
+        working-directory: ${{ runner.temp }}/app
+        run: |
+          go install "github.com/a-h/templ/cmd/templ@$(go list -m -f '{{.Version}}' github.com/a-h/templ)"
+          curl -fsSL -o "$RUNNER_TEMP/tailwindcss" \
+            https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.4/tailwindcss-linux-x64
+          echo "149a8ece5b855587a9c10de6da9dcbcfad0e47c4ed5dca219f721b3eae39d817  $RUNNER_TEMP/tailwindcss" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/tailwindcss"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Chromium for the browser tests
+        working-directory: ${{ runner.temp }}/app
+        run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps chromium
+      - name: make test in the generated project
+        working-directory: ${{ runner.temp }}/app
+        run: make test

@@ -1,0 +1,60 @@
+package view
+
+type ToastKind string
+
+const (
+	ToastSuccess ToastKind = "success"
+	ToastError   ToastKind = "error"
+)
+
+type ToastArgs struct {
+	Kind   ToastKind
+	Header string
+	Body   string
+}
+
+func ErrorToast(header string) ToastArgs {
+	return ToastArgs{Kind: ToastError, Header: header, Body: "Please try again"}
+}
+
+func toastRole(kind ToastKind) string {
+	if kind == ToastError {
+		return "alert"
+	}
+
+	return "status"
+}
+
+func SuccessToast(header string, body string) ToastArgs {
+	return ToastArgs{Kind: ToastSuccess, Header: header, Body: body}
+}
+
+// Toast is meant to be returned out of band: it appends itself to the #toasts container in the layout.
+templ Toast(args ToastArgs) {
+	<div hx-swap-oob="beforeend:#toasts">
+		<div
+			x-data="toast"
+			x-show="show"
+			x-transition.opacity
+			@click="show = false"
+			role={ toastRole(args.Kind) }
+			class={
+				"w-72 rounded-xl shadow-lg bg-linear-to-br from-neutral-800 to-neutral-900 text-white border p-4 cursor-pointer",
+				templ.KV("border-red-400", args.Kind == ToastError),
+				templ.KV("border-white/20", args.Kind != ToastError),
+			}
+		>
+			<p
+				class={
+					"font-bold",
+					templ.KV("text-red-300", args.Kind == ToastError),
+				}
+			>
+				{ args.Header }
+			</p>
+			if args.Body != "" {
+				<p class="text-sm text-neutral-300">{ args.Body }</p>
+			}
+		</div>
+	</div>
+}

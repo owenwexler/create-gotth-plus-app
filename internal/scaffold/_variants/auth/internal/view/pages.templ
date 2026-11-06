@@ -1,0 +1,20 @@
+package view
+
+templ ErrorPage() {
+	<div class="flex flex-col items-center justify-center space-y-2 m-2">
+		@ErrorText()
+		@ResetButton()
+	</div>
+}
+
+// Home is the splash page. The example app is the single @ExampleApp() line below.
+templ Home() {
+	@Layout("GOTTH+") {
+		@AuthNav()
+		<main class="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center gap-12 px-5 py-16 sm:gap-16 sm:px-8 sm:py-24">
+			@Title()
+			@ExampleApp()
+			<p class="text-center text-xs tracking-wide text-neutral-400">A stack ready for what’s next.</p>
+		</main>
+	}
+}

@@ -1,0 +1,13 @@
+package view
+
+import "github.com/owenwexler/gotth-plus/internal/styles"
+
+templ ResetButton() {
+	<button
+		hx-get="/"
+		hx-target="body"
+		class={ styles.GenerateBigButtonClasses() }
+	>
+		Try Again
+	</button>
+}

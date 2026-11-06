@@ -1,0 +1,68 @@
+package view
+
+import "github.com/owenwexler/gotth-plus/internal/styles"
+
+// This file is the example app. See "Removing the example app" in README.md.
+templ ExampleApp() {
+	<section id="example-app" aria-label="Interactive examples" class="grid w-full grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
+		@HelloForm()
+		@Counter()
+	</section>
+}
+
+// Greeting is the fragment POST /hello answers with; it replaces itself by id.
+templ Greeting(text string) {
+	<h2 id="greeting" class="break-words text-3xl font-semibold tracking-tight" aria-live="polite">{ text }</h2>
+}
+
+// HelloForm shows htmx: the server validates the name and returns the new greeting fragment.
+templ HelloForm() {
+	<div class={ styles.GenerateCardClasses() }>
+		<p class="text-xs font-medium tracking-[0.18em] text-neutral-400 uppercase">01 / Server interaction</p>
+		@Greeting("Hello!")
+		<p class="text-sm leading-relaxed text-neutral-300">A little introduction, powered by HTMX. Send your name and let the server say hello.</p>
+		<form
+			class={ styles.GenerateHorizontalFormClasses() }
+			hx-post="/hello"
+			hx-target="#greeting"
+			hx-swap="outerHTML"
+			hx-trigger="submit"
+			hx-disabled-elt="find button"
+			hx-indicator="find button"
+		>
+			<label for="name" class="sr-only">Your name</label>
+			<input
+				type="text"
+				id="name"
+				name="name"
+				placeholder="Enter your name..."
+				maxlength="50"
+				autocomplete="given-name"
+				class={ styles.GenerateInputClasses() }
+			/>
+			<button type="submit" class={ styles.GenerateBigButtonClasses(), "relative" }>
+				<!-- The label stays in the flow (invisible while loading) so the button doesn't resize -->
+				<span class="[.htmx-request_&]:invisible">Say Hello</span>
+				<!-- aria-hidden keeps the spinner's "Loading" label out of the button's name ("Say Hello") -->
+				<span aria-hidden="true" class="htmx-indicator absolute inset-0 flex items-center justify-center">
+					@Spinner(16, 16)
+				</span>
+			</button>
+		</form>
+	</div>
+}
+
+// Counter is controlled entirely by Alpine (the counter component in app.js); it never makes a request.
+templ Counter() {
+	<div x-data="counter" class={ styles.GenerateCardClasses() }>
+		<p class="text-xs font-medium tracking-[0.18em] text-neutral-400 uppercase">02 / Client interaction</p>
+		<h2 class="text-3xl font-semibold tracking-tight">Counter</h2>
+		<p class="text-sm leading-relaxed text-neutral-300">Small interactions, instant feedback. A little Alpine.js keeps things counting.</p>
+		<p id="counter-value" class="py-2 text-6xl font-light tracking-tight tabular-nums" aria-live="polite" x-text="count">0</p>
+		<div class="mt-auto flex items-center justify-center gap-3">
+			<button type="button" aria-label="Decrement" class={ styles.GenerateBigButtonClasses() } @click="decrement">-</button>
+			<button type="button" class={ styles.GenerateBigButtonClasses() } @click="reset">Reset</button>
+			<button type="button" aria-label="Increment" class={ styles.GenerateBigButtonClasses() } @click="increment">+</button>
+		</div>
+	</div>
+}

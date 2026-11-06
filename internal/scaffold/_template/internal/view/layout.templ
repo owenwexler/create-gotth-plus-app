@@ -1,0 +1,31 @@
+package view
+
+import "github.com/owenwexler/gotth-plus/internal/csrf"
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<meta name="htmx-config" content='{"selfRequestsOnly":true,"allowEval":false,"includeIndicatorStyles":false}'/>
+			<link rel="stylesheet" href="/static/output.css"/>
+			<script src="/static/js/htmx.min.js"></script>
+			<script defer src="/static/js/app.js"></script>
+			<script defer src="/static/js/alpine-csp.min.js"></script>
+			<script defer src="/static/js/hx-optimistic.min.js"></script>
+			<!-- Self-hosting a font? Put the woff2 in /static/font, declare it in static/input.css and preload it here:
+			<link rel="preload" as="font" type="font/woff2" href="/static/font/your-font.woff2" crossorigin="anonymous"/>
+			-->
+		</head>
+		<body
+			class="min-h-screen bg-black bg-[radial-gradient(circle_at_50%_15%,#333333_0%,#171717_38%,#080808_72%)] text-white antialiased"
+			hx-ext="optimistic"
+			hx-headers={ templ.JSONString(map[string]string{csrf.HeaderName: csrf.Token(ctx)}) }
+		>
+			{ children... }
+			<div id="toasts" aria-live="polite" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"></div>
+		</body>
+	</html>
+}
