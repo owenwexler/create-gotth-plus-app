@@ -117,6 +117,7 @@ jobs:
             curl -fsS http://localhost:18080/healthz
             curl -fsS -o /dev/null http://localhost:18080/static/output.css
             curl -fsS -o /dev/null http://localhost:18080/static/js/htmx.min.js
+            curl -fsS -o /dev/null http://localhost:18080/static/js/htmx-ext-preload.min.js
             curl -fsSI http://localhost:18080/ | grep -i '^strict-transport-security'
             docker rm -f "run-$name"
           done

@@ -17,7 +17,11 @@ find . -name '*.templ' -print0 | while IFS= read -r -d '' f; do
   cp "$f" "$TMP/$f"
 done
 
-(cd "$TMP" && go run "github.com/a-h/templ/cmd/templ@$VERSION" generate -path . 2>&1 | grep -v "templ version check" || true)
+# one variant at a time, from its root: templ writes each file's path (relative to where it runs)
+# into the generated code, and in a project the variant's root is the project's root
+for variant in "$TMP"/*/; do
+  (cd "$variant" && go run "github.com/a-h/templ/cmd/templ@$VERSION" generate -path . 2>&1 | grep -v "templ version check" || true)
+done
 
 find "$TMP" -name '*_templ.go' -print0 | while IFS= read -r -d '' f; do
   rel="${f#"$TMP"/}"

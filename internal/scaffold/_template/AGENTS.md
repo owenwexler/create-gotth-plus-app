@@ -155,7 +155,9 @@ static/               input.css, built CSS, fonts, icons
 - Static assets: `Cache-Control: public, max-age=31536000, immutable` for hashed filenames; `no-cache` (ETag) for HTML.
 - Load scripts with `defer`. Keep total JS tiny (htmx ≈ 14 kB gz, Alpine ≈ 15 kB gz). Don't add a bundler unless you must.
 - Use `hx-boost` for progressive enhancement of links/forms where full navigations would otherwise occur.
-- Use `hx-preload`-style prefetching sparingly and only for idempotent GETs.
+- Prefetch with htmx's `preload` extension (loaded on `<body>` in this stack): `preload` or `preload="mouseover"` on links
+  and `hx-get` elements whose GET is cheap and side-effect free (tabs, pagination, next pages). Use it sparingly: a
+  preload is a real request (it carries `HX-Preloaded: true`) even if the user never clicks.
 - Set explicit `width`/`height` on images, `loading="lazy"` below the fold, prefer SVG/AVIF/WebP.
 
 ## 8. Security
@@ -251,7 +253,7 @@ Before finishing a task, verify:
 **GOTTH+ template** — a splash page plus a small example app (a hello form driven by htmx and a counter driven by Alpine). Replace this paragraph with a description of your app.
 
 - Module: `github.com/owenwexler/gotth-plus` (rename it in `go.mod` and the imports). Entry: `cmd/server/main.go`. Config via `.env` (`GoEnv`, `Port`, `DatabasePath`, `SeedAdminKey`); see `.env.example`.
-- No Node and no npm anywhere: Tailwind is the standalone CLI, and htmx, Alpine (CSP build) and `hx-optimistic` are downloaded into `static/js` by `download-js.sh` (`make js`), which needs only git and curl.
+- No Node and no npm anywhere: Tailwind is the standalone CLI, and htmx, its `preload` extension, Alpine (CSP build) and `hx-optimistic` are downloaded into `static/js` by `download-js.sh` (`make js`), which needs only git and curl.
 - Dev workflow: `make setup` once, then `make dev` (Tailwind `--watch` plus `templ generate --watch` with its live-reload proxy on port 7331; templ starts the server for you). `make air` is the alternative (config in `air.toml`; excludes `*_templ.go`).
 - Before finishing: `make check` (generate, format, vet, and `make test`: unit, integration and end-to-end tests). The browser tests need `make e2e-install` once (`make setup` does it).
 - Data: SQLite (`app.db`) via GORM (`gorm.io/driver/sqlite`, CGO). `model.Example` is a placeholder model with a UUID primary key and soft-delete (`DeletedAt`).
@@ -260,7 +262,7 @@ Before finishing a task, verify:
 - Errors: htmx requests get an out of band toast with `HX-Reswap: none` (`respondWithToast` in `internal/factory`), or the error page with `HX-Reswap: innerHTML` (`respondWithErrorPage`), swapped into the request's target. `app.js` swaps any 4xx/5xx that sets `HX-Reswap`, and shows a generic error toast for network failures and other error responses. Full page loads get `view.ErrorPage`.
 - Forms: `data-reset-on-success` clears a form, and `data-close-on-success` closes a `<dialog>` (refocusing its input on an error), only after a real 2xx/3xx answer. Disable submit buttons while in flight with `hx-disabled-elt`.
 - Pagination: `repository.ConstantPageSize = 10`; `Paginate` clamps page size to 100.
-- Frontend: htmx + Alpine + `hx-optimistic` loaded from `/static/js` in `internal/view/layout.templ`; Tailwind v4 (`static/input.css` → `static/output.css`, both `internal/view/*.templ` and `internal/styles/*.go` are scanned).
+- Frontend: htmx (with its `preload` extension; `hx-ext="optimistic, preload"` on `<body>`, opt in per element with `preload`) + Alpine + `hx-optimistic` loaded from `/static/js` in `internal/view/layout.templ`; Tailwind v4 (`static/input.css` → `static/output.css`, both `internal/view/*.templ` and `internal/styles/*.go` are scanned).
 - Alpine uses the CSP build, which cannot evaluate inline objects or statements: register components with `Alpine.data` in `static/js/app.js` and reference them by name (`x-data="counter"`). Shared client state lives in the `globalState` Alpine store; its example fields (`pendingRequests`, `loading`, `online`) are kept current by the htmx and browser event hooks in `app.js`.
 - Seeding: `POST /seed` (development only, optionally behind `SeedAdminKey`) loads `seedData.json`; run it with `make seed` / `./seed.sh`, which handles the CSRF token.
 - Tests: unit tests sit next to their packages; integration tests (`cmd/server/integration_test.go`) drive the real mux and middleware with `httptest` on a throwaway SQLite file; E2E tests (build tag `e2e`) drive Chromium with Playwright-Go: the harness is `cmd/server/e2e_helpers_test.go` (one shared browser, a fresh context per test, `newE2EApp`/`newPage`, request and console-error recording, `delayRoute`/`failRoute`, `newTab`/`inContext`, `eventually`), app-independent checks are in `e2e_generic_test.go` (focus rings, live toast region, no third-party requests, no horizontal scroll, no-JS load, axe), and the example app's tests are in `e2e_test.go`. The axe scan runs when `AXE_CORE_JS` points at an `axe.min.js` (or one is at `cmd/server/testdata/axe.min.js`), and skips otherwise.

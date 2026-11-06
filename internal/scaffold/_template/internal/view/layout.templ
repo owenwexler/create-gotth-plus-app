@@ -12,6 +12,8 @@ templ Layout(title string) {
 			<meta name="htmx-config" content='{"selfRequestsOnly":true,"allowEval":false,"includeIndicatorStyles":false}'/>
 			<link rel="stylesheet" href="/static/output.css"/>
 			<script src="/static/js/htmx.min.js"></script>
+			<!-- htmx's preload extension: add preload (or preload="mouseover") to links and hx-get elements -->
+			<script defer src="/static/js/htmx-ext-preload.min.js"></script>
 			<script defer src="/static/js/app.js"></script>
 			<script defer src="/static/js/alpine-csp.min.js"></script>
 			<script defer src="/static/js/hx-optimistic.min.js"></script>
@@ -21,7 +23,7 @@ templ Layout(title string) {
 		</head>
 		<body
 			class="min-h-screen bg-black bg-[radial-gradient(circle_at_50%_15%,#333333_0%,#171717_38%,#080808_72%)] text-white antialiased"
-			hx-ext="optimistic"
+			hx-ext="optimistic, preload"
 			hx-headers={ templ.JSONString(map[string]string{csrf.HeaderName: csrf.Token(ctx)}) }
 		>
 			{ children... }

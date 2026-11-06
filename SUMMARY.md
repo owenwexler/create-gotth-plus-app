@@ -36,6 +36,15 @@ GitHub Actions and browser-on-Linux run), then merge.
   (gofmt, vet, `go mod verify`, govulncheck, actionlint with shellcheck on generated workflows),
   `docker build` and run of generated images, and a generated project's own `make test` with
   browser tests. `TestRepoWorkflowUsesPins` keeps its pins equal to `pins.go`.
+- **htmx preload extension** (gotth-plus branch `add-htmx-preload`, CLI branch `add-htmx-preload`):
+  `download-js.sh` self-hosts `htmx-ext-preload.min.js` (latest 2.x from jsDelivr, as the extension
+  has no release tags; `PRELOAD_VERSION` pins), the layout loads it and `<body>` has
+  `hx-ext="optimistic, preload"`; use is opt-in per element (`preload`, `preload="mouseover"`). A
+  generic E2E test hovers a probe link and sees the preload under the CSP. The CLI records its
+  version and hash, the Dockerfile requires it, and the CLI's CI fetches it from the running image.
+- **templ output fixes:** `make gen-templ` now generates per variant, so file paths in generated code
+  match a project's layout; every generated project in the matrix now runs `templ generate` and must
+  produce no changes, as its own CI requires.
 - **Local Go setup:** `/usr/bin/go` (Arch's `go` package, built with `GOEXPERIMENT=nodwarf5`) now
   comes before mise's Go in `PATH`, while `GOROOT` points at mise's install, so every build fails
   with "version go1.27.3 does not match go tool version go1.27.3-X:nodwarf5". Today's commands put
@@ -111,14 +120,15 @@ These go beyond, or differ from, what `SPEC.md` says:
 
 1. `air.toml` never runs `templ generate`, so `.templ` edits rebuild from stale code.
 2. `make air` runs plain `air`, which only reads `.air.toml`, so `air.toml` is ignored entirely.
-3. `internal/csrf/csrf_test.go`, "wrong header" case: `"x" + token[1:]` equals the token when it
-   already starts with `x`, so the test fails about 1 run in 64.
+3. ~~`internal/csrf/csrf_test.go`, "wrong header" case: `"x" + token[1:]` equals the token when it
+   already starts with `x`, so the test fails about 1 run in 64.~~ Fixed in gotth-plus `ae4a02e`.
 4. SECURITY.md says production `POST /seed` returns 404; without a CSRF token it returns 403
    (CSRF runs before routing). The route is gone; only the wording is off.
 5. Your local templ CLI is v0.3.1020; gotth-plus's `go.mod` uses v0.3.1070. A `tool` directive
-   (`go tool templ`) would keep them in step.
+   (`go tool templ`) would keep them in step. gotth-plus's `*_templ.go` files were regenerated with
+   v0.3.1070 in `552e97a`; until then every generated project's CI templ check would have failed.
 
-The CLI works around 1 and 2 in every generated project; 3 to 5 are left as they are.
+The CLI works around 1 and 2 in every generated project; 4 is left as it is.
 
 ## Open ideas (not started)
 

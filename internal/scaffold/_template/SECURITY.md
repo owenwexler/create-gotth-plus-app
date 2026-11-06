@@ -155,7 +155,8 @@ security headers. When you add middleware:
   sure your sanitizer strips `hx-*` and `data-hx-*` attributes. (If you move to htmx 4, check the
   name of this attribute in its migration guide.)
 - **Never mutate on GET.** htmx makes it easy to put `hx-get` on anything; GET requests skip the
-  CSRF check by design.
+  CSRF check by design. With the `preload` extension, a GET can also be sent when the pointer merely
+  passes over a link, so a GET that changes something would now happen without a click.
 - **Fragment endpoints are still endpoints.** Anyone can call them directly without htmx. Each one
   needs the same validation and authorisation as a full-page route. `HX-Request` is a client
   header and proves nothing.
@@ -287,7 +288,7 @@ use the proxy or a shared store if you need a global limit.
 - Review new Go dependencies before adding them; fewer is better. The template avoids Node and npm
   entirely to keep the JavaScript supply chain small. Keep it that way.
 - **Browser libraries:** pin versions when you run `download-js.sh`
-  (`HTMX_VERSION=… ALPINE_VERSION=… HX_OPTIMISTIC_VERSION=… ./download-js.sh`), commit the
+  (`HTMX_VERSION=… PRELOAD_VERSION=… ALPINE_VERSION=… HX_OPTIMISTIC_VERSION=… ./download-js.sh`), commit the
   results, and compare the printed `sha384` against the upstream release before upgrading. Read
   release notes for security fixes.
 - `playwright-go` is a test-only dependency (behind the `e2e` build tag) and is not compiled into

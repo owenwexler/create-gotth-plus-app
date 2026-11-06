@@ -16,6 +16,30 @@ import (
 	"github.com/mxschmitt/playwright-go"
 )
 
+// TestE2EPreloadExtension: htmx's preload extension loads under the CSP and fetches a link marked
+// preload="mouseover" while the pointer rests on it, before any click. Nothing in the template uses
+// preloading, so the test adds a link like one an app would mark.
+func TestE2EPreloadExtension(t *testing.T) {
+	a := newE2EApp(t)
+	a.open(t, "/")
+	// /healthz is a cheap GET without side effects, the kind of request preloading is for
+	_, err := a.Page.Evaluate(`(() => {
+		const link = document.createElement('a')
+		link.id = 'preload-probe'
+		link.href = '/healthz'
+		link.textContent = 'Preload probe'
+		link.setAttribute('preload', 'mouseover')
+		document.body.prepend(link)
+		htmx.process(link)
+	})()`)
+	expect(t, err)
+
+	before := a.countRequests("GET", "/healthz")
+	expect(t, a.Page.Locator("#preload-probe").Hover())
+	eventually(t, "the hovered link is preloaded", func() bool { return a.countRequests("GET", "/healthz") > before })
+	a.expectNoConsoleErrors(t)
+}
+
 // TestE2ENoThirdPartyRequests: everything (scripts, styles, fonts) is self-hosted, and nothing errors.
 func TestE2ENoThirdPartyRequests(t *testing.T) {
 	a := newE2EApp(t)

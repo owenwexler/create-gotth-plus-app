@@ -13,7 +13,7 @@ setup: ## First-time setup: .env, Go modules, the JS libraries, the test browser
 	go mod download
 	$(MAKE) js generate css e2e-install
 
-js: ## Download the latest htmx, Alpine (CSP build) and hx-optimistic into static/js
+js: ## Download the latest htmx, its preload extension, Alpine (CSP build) and hx-optimistic into static/js
 	./download-js.sh
 
 generate: ## Regenerate *_templ.go from the .templ files

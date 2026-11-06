@@ -185,7 +185,7 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 		flag, title, desc string
 		value             *bool
 	}{
-		{"js", "Download and commit the JS libraries?", "htmx, Alpine (CSP build) and hx-optimistic, with their versions and SHA-384 hashes recorded in README.md, so production serves reviewed copies.", &o.CommitJS},
+		{"js", "Download and commit the JS libraries?", "htmx (with its preload extension), Alpine (CSP build) and hx-optimistic, with their versions and SHA-384 hashes recorded in README.md, so production serves reviewed copies.", &o.CommitJS},
 		{"git", "Initialize git and make a first commit?", "Skipped when the project is inside an existing repository.", &o.Git},
 		{"setup", "Run make setup now?", "Downloads the Go modules and the JS libraries (and Chromium, a few hundred MB, for the E2E tests), and builds once.", &o.Setup},
 	} {

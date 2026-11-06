@@ -85,6 +85,8 @@ func TestHome(t *testing.T) {
 		`id="greeting"`,
 		"Hello!",
 		`hx-post="/hello"`,
+		`src="/static/js/htmx-ext-preload.min.js"`,
+		`hx-ext="optimistic, preload"`,
 		`x-data="counter"`,
 		`id="toasts"`,
 		csrf.HeaderName,

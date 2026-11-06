@@ -1,7 +1,7 @@
 # create-gotth-plus-app
 
 Creates a new [GOTTH+](https://github.com/owenwexler/gotth-plus) web app: Go, Templ, Tailwind CSS v4,
-htmx, hx-optimistic and the Alpine.js CSP build, with the security defaults, tests and agent guidance
+htmx (with its preload extension), hx-optimistic and the Alpine.js CSP build, with the security defaults, tests and agent guidance
 of the GOTTH+ template.
 
 ```bash
@@ -41,7 +41,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--live-reload` | `templ` | What `make dev` runs: `templ` (templ's proxy) or `air`; both reload the browser on port 7331 |
 | `--docker` | `true` | Add a production `Dockerfile` (distroless, non-root, pinned Tailwind) and `.dockerignore` |
 | `--ci` | `true` | Add a GitHub Actions workflow (verify, generated-code check, vet, test with a database service, govulncheck, Docker build) |
-| `--js` | `true` | Download htmx, Alpine (CSP) and hx-optimistic, record versions and SHA-384 hashes in the README, and commit them |
+| `--js` | `true` | Download htmx and its preload extension, Alpine (CSP) and hx-optimistic, record versions and SHA-384 hashes in the README, and commit them |
 | `--axe` | `true` | Download axe-core (sha512-verified, from the npm registry) for the accessibility test; off without `--e2e` |
 | `--git` | `true` | `git init` and a first commit (skipped inside an existing repository or a non-empty directory) |
 | `--setup` | `true` | Run `make setup` (Go modules, JS libraries, Chromium for the E2E tests, a first build) |

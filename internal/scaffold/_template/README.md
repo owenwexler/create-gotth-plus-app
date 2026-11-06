@@ -12,6 +12,7 @@ No Node, no npm, no bundler. Tailwind is the standalone CLI, and the three brows
 - Layered layout (`model` → `repository` → `service` → `factory`/`handler` → `view`) on SQLite and GORM
 - Toasts and a spinner as Templ components, and htmx error handling that shows a toast instead of failing silently
 - `hx-optimistic` wired up, with rollback on server errors
+- htmx's `preload` extension loaded, ready to fetch pages and fragments on hover (see Preloading)
 - A dev-only `/seed` route and a script that runs it with a valid CSRF token
 - Unit, integration and Playwright end-to-end tests
 - `AGENTS.md` / `CLAUDE.md` guidance for AI coding agents
@@ -37,9 +38,23 @@ make dev      # live reload; open http://localhost:7331
 
 ### The JavaScript libraries
 
-htmx, the Alpine.js CSP build and `hx-optimistic` are **not** included in this template. `make js` (`./download-js.sh`) downloads the latest version of each into `static/js` and prints its SHA-384 hash. It resolves versions from each project's git tags; pin one with `HTMX_VERSION=2.0.11 ./download-js.sh` (likewise `ALPINE_VERSION`, `HX_OPTIMISTIC_VERSION`). htmx stays on its 2.x line unless you set `HTMX_MAJOR`.
+htmx, its `preload` extension, the Alpine.js CSP build and `hx-optimistic` are **not** included in this template. `make js` (`./download-js.sh`) downloads the latest version of each into `static/js` and prints its SHA-384 hash. It resolves versions from each project's git tags (the preload extension, which has no release tags of its own, from jsDelivr); pin one with `HTMX_VERSION=2.0.11 ./download-js.sh` (likewise `PRELOAD_VERSION`, `ALPINE_VERSION`, `HX_OPTIMISTIC_VERSION`). htmx stays on its 2.x line unless you set `HTMX_MAJOR`.
 
 `.gitignore` excludes `static/js/*.min.js` so the template itself stays free of them. In your own project, remove that line and commit the files, so production serves copies you have pinned and reviewed.
+
+### Preloading
+
+htmx's [preload extension](https://htmx.org/extensions/preload/) is loaded on every page (`hx-ext="optimistic, preload"` on `<body>`), but nothing uses it yet. Add `preload` to a link or an `hx-get` element to fetch its response on `mousedown`, or `preload="mouseover"` to fetch it after a short hover, so the click is answered from memory:
+
+```html
+<nav preload="mouseover">            <!-- applies to every link inside -->
+  <a href="/projects">Projects</a>
+  <a href="/settings">Settings</a>
+</nav>
+<button hx-get="/tabs/activity" hx-target="#panel" preload="mouseover">Activity</button>
+```
+
+Good candidates are tabs, pagination and "next page" links. Only preload GETs that are cheap and change nothing: a preload is a real request (sent with an `HX-Preloaded: true` header), whether or not the user clicks.
 
 ### Seed data
 
@@ -76,7 +91,7 @@ static/
   input.css         Tailwind entry point
   js/app.js         Alpine store and components, htmx hooks
   font/  icon/      your self-hosted fonts and icons
-download-js.sh      downloads htmx, Alpine (CSP) and hx-optimistic
+download-js.sh      downloads htmx, its preload extension, Alpine (CSP) and hx-optimistic
 seed.sh             runs POST /seed with a CSRF token
 seedData.json       sample data
 ```

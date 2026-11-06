@@ -41,12 +41,12 @@ func fakeDownload(calls *[]string) Runner {
 		if err := os.MkdirAll(filepath.Join(dir, "static", "js"), 0o755); err != nil {
 			return err
 		}
-		for _, f := range []string{"htmx.min.js", "alpine-csp.min.js", "hx-optimistic.min.js"} {
+		for _, f := range []string{"htmx.min.js", "htmx-ext-preload.min.js", "alpine-csp.min.js", "hx-optimistic.min.js"} {
 			if err := os.WriteFile(filepath.Join(dir, "static", "js", f), []byte("// "+f), 0o644); err != nil {
 				return err
 			}
 		}
-		fmt.Fprint(out, "htmx 2.0.11\n  htmx.min.js <- url\nalpine (csp build) 3.15.2\nhx-optimistic 1.4.0\ndone\n")
+		fmt.Fprint(out, "htmx 2.0.11\n  htmx.min.js <- url\nhtmx-ext-preload 2.1.2\nalpine (csp build) 3.15.2\nhx-optimistic 1.4.0\ndone\n")
 		return nil
 	}
 }
@@ -79,8 +79,9 @@ func TestDownloadJSRecordsVersions(t *testing.T) {
 	for _, want := range []string{
 		"#### Pinned versions\n",
 		"| `htmx.min.js` | htmx | 2.0.11 | `sha384-" + base64.StdEncoding.EncodeToString(sum[:]) + "` |",
-		"HTMX_VERSION=2.0.11 ALPINE_VERSION=3.15.2 HX_OPTIMISTIC_VERSION=1.4.0 ./download-js.sh",
+		"HTMX_VERSION=2.0.11 PRELOAD_VERSION=2.1.2 ALPINE_VERSION=3.15.2 HX_OPTIMISTIC_VERSION=1.4.0 ./download-js.sh",
 		"Downloaded on 2026-11-03",
+		"| `htmx-ext-preload.min.js` | htmx preload extension | 2.1.2 |",
 	} {
 		if !strings.Contains(string(readme), want) {
 			t.Errorf("README is missing %q:\n%s", want, readme)

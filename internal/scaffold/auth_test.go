@@ -94,10 +94,17 @@ func TestVariantTemplGenerated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("go", "run", "github.com/a-h/templ/cmd/templ@"+version, "generate", "-path", ".")
-	cmd.Dir = filepath.Join(dir, "variants")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("templ generate: %v\n%s", err, out)
+	// one variant at a time, from its root, as in a project (templ writes paths relative to it)
+	variants, err := os.ReadDir(filepath.Join(dir, "variants"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range variants {
+		cmd := exec.Command("go", "run", "github.com/a-h/templ/cmd/templ@"+version, "generate", "-path", ".")
+		cmd.Dir = filepath.Join(dir, "variants", v.Name())
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("templ generate in %s: %v\n%s", v.Name(), err, out)
+		}
 	}
 	for _, path := range templs {
 		gen := strings.TrimSuffix(path, ".templ") + "_templ.go"

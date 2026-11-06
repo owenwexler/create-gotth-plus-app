@@ -95,14 +95,14 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.StringVar(&f.liveReload, "live-reload", string(defaults.LiveReload), "what make dev runs: templ (templ's proxy) or air")
 	fs.BoolVar(&f.docker, "docker", defaults.Docker, "add a production Dockerfile (distroless, non-root)")
 	fs.BoolVar(&f.ci, "ci", defaults.CI, "add a GitHub Actions workflow (verify, generated-code check, vet, test, govulncheck)")
-	fs.BoolVar(&f.js, "js", defaults.CommitJS, "download htmx, Alpine (CSP) and hx-optimistic, record their versions and hashes, and commit them")
+	fs.BoolVar(&f.js, "js", defaults.CommitJS, "download htmx and its preload extension, Alpine (CSP) and hx-optimistic, record their versions and hashes, and commit them")
 	fs.BoolVar(&f.axe, "axe", defaults.Axe, "download axe-core for the accessibility test")
 	fs.BoolVar(&f.git, "git", defaults.Git, "git init and make a first commit")
 	fs.BoolVar(&f.setup, "setup", defaults.Setup, "run make setup (Go modules, JS libraries, test browser, first build)")
 
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: create-gotth-plus-app [flags] [project-name]\n\n")
-		fmt.Fprintf(stderr, "Creates a new GOTTH+ app (Go, Templ, Tailwind, htmx, hx-optimistic, Alpine CSP).\n")
+		fmt.Fprintf(stderr, "Creates a new GOTTH+ app (Go, Templ, Tailwind, htmx with preload, hx-optimistic, Alpine CSP).\n")
 		fmt.Fprintf(stderr, "Asks for anything not given as a flag, unless --yes is set. Use \".\" as the name for the current directory.\n\nFlags:\n")
 		fs.PrintDefaults()
 	}

@@ -264,6 +264,7 @@ func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLi
 	if out, err := exec.Command("gofmt", "-l", dir).Output(); err != nil || len(out) > 0 {
 		t.Errorf("gofmt -l: %v\n%s", err, out)
 	}
+	checkTemplUpToDate(t, dir)
 	if !e2e {
 		// the Makefile still parses, and no target refers to the removed tests
 		out, err := exec.Command("make", "-C", dir, "-n", "setup", "vet", "test", "help").CombinedOutput()
@@ -441,5 +442,37 @@ func TestOverlayRefusesChangedTemplateFile(t *testing.T) {
 	p["internal/database/database.go"] = append(p["internal/database/database.go"], "// changed upstream\n"...)
 	if _, err := p.overlay("postgres"); err == nil || !strings.Contains(err.Error(), "changed") {
 		t.Errorf("overlay = %v, want an error about the changed template file", err)
+	}
+}
+
+// checkTemplUpToDate runs the template's templ version in a generated project and fails if any
+// *_templ.go changes: the project's CI makes the same check ("templ generate && git diff").
+func checkTemplUpToDate(t *testing.T, dir string) {
+	t.Helper()
+	_, version, err := Requirements(Template())
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() map[string]string {
+		files := map[string]string{}
+		_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && strings.HasSuffix(path, "_templ.go") {
+				b, _ := os.ReadFile(path)
+				files[path] = string(b)
+			}
+			return nil
+		})
+		return files
+	}
+	before := read()
+	cmd := exec.Command("go", "run", "github.com/a-h/templ/cmd/templ@"+version, "generate", "-path", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("templ generate: %v\n%s", err, out)
+	}
+	for path, content := range read() {
+		if before[path] != content {
+			t.Errorf("templ generate changes %s: the generated project's CI would fail", path)
+		}
 	}
 }
