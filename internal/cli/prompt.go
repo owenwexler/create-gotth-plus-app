@@ -79,12 +79,14 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 	if !given["auth"] {
 		groups = append(groups, huh.NewGroup(huh.NewSelect[options.Auth]().
 			Title("Sign-in").
-			Description("Built-in: server-side sessions in the app, with a password and/or Google, GitHub or Apple.").
+			Description("Recommended: a hosted auth service, which handles passwords, account recovery, MFA and breach\n"+
+				"protection for you. Built-in auth keeps all of that in your app: advanced and experimental, for\n"+
+				"developers ready to own and review that code.").
 			Options(
-				huh.NewOption("None", options.NoAuth),
-				huh.NewOption("Built-in", options.BuiltinAuth),
-				huh.NewOption("OIDC (WorkOS/Logto/Kinde)", options.OIDCAuth),
-				huh.NewOption("Supabase Auth (uses Supabase's Postgres)", options.SupabaseAuth),
+				huh.NewOption("None: no sign-in (fine for learning and prototypes; add it later)", options.NoAuth),
+				huh.NewOption("Supabase Auth: hosted (uses Supabase's Postgres)", options.SupabaseAuth),
+				huh.NewOption("OIDC provider: hosted (WorkOS, Logto, Kinde, Auth0, Zitadel, Keycloak, ...)", options.OIDCAuth),
+				huh.NewOption("Built-in (advanced, experimental): passwords and providers in your app", options.BuiltinAuth),
 			).
 			Value(&o.Auth)))
 	}
@@ -94,8 +96,9 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			methodOptions[i] = huh.NewOption(m.Label(), m).Selected(m == options.Password)
 		}
 		groups = append(groups, huh.NewGroup(huh.NewMultiSelect[options.AuthMethod]().
-			Title("Sign-in methods").
-			Description("Pick one or more. Google, GitHub and Apple each need an app registered with them; keys go in .env.").
+			Title("Built-in sign-in methods (experimental)").
+			Description("Pick one or more. Google, GitHub and Apple each need an app registered with them; keys go in .env.\n"+
+				"Built-in auth hasn't been independently audited: review internal/auth before production.").
 			Options(methodOptions...).
 			Validate(func(ms []options.AuthMethod) error {
 				if len(ms) == 0 {

@@ -313,11 +313,14 @@ func TestAuthFlag(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
-	if !strings.Contains(out, "Auth                 Built-in: Email and password") || !strings.Contains(out, "dev@example.com") {
+	if !strings.Contains(out, "Auth                 Built-in (experimental): Email and password") || !strings.Contains(out, "dev@example.com") {
 		t.Errorf("output:\n%s", out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "app", "internal", "auth", "session.go")); err != nil {
 		t.Error("no auth package")
+	}
+	if !strings.Contains(out, "Built-in auth is experimental") {
+		t.Errorf("no experimental note for built-in auth:\n%s", out)
 	}
 	if code, _, errOut := runCLI(t, t.TempDir(), "--yes", "--auth=clerk", "app"); code != exitError || !strings.Contains(errOut, "unknown auth") {
 		t.Errorf("--auth=clerk: exit %d, %q", code, errOut)
@@ -330,7 +333,7 @@ func TestAuthMethodsFlag(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
-	if !strings.Contains(out, "Built-in: GitHub, Apple") || !strings.Contains(out, "sign-in providers: register an app") || strings.Contains(out, "make seed") {
+	if !strings.Contains(out, "Built-in (experimental): GitHub, Apple") || !strings.Contains(out, "sign-in providers: register an app") || strings.Contains(out, "make seed") {
 		t.Errorf("output:\n%s", out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "app", "internal", "auth", "oauth.go")); err != nil {

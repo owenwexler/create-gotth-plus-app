@@ -249,7 +249,7 @@ func (o Options) AuthLabel() string {
 	for i, m := range o.AuthMethods {
 		labels[i] = m.Label()
 	}
-	return "Built-in: " + strings.Join(labels, ", ")
+	return "Built-in (experimental): " + strings.Join(labels, ", ")
 }
 
 // LiveReload is a live-reload tool for make dev.

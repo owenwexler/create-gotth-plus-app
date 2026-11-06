@@ -338,7 +338,8 @@ func authDocEdits(o options.Options) []edit {
 	readme := []edit{
 		{"README.md", "- A dev-only `/seed` route and a script that runs it with a valid CSRF token\n",
 			"- A dev-only `/seed` route and a script that runs it with a valid CSRF token\n" +
-				"- Sign-in with " + strings.Join(what, "; or ") + ", on server-side sessions\n"},
+				"- Sign-in with " + strings.Join(what, "; or ") + ", on server-side sessions" +
+				map[bool]string{true: " (built-in: experimental)", false: ""}[o.Auth == options.BuiltinAuth] + "\n"},
 		{"README.md", "  config/           environment loading and validation\n",
 			"  auth/             sessions, the signed-in user, " + map[bool]string{true: "password hashing, ", false: ""}[password] +
 				map[bool]string{true: "sign-in providers, ", false: ""}[oauth] + "per-account limits\n  config/           environment loading and validation\n"},
@@ -369,7 +370,9 @@ func authDocEdits(o options.Options) []edit {
 	for _, f := range fields {
 		names = append(names, "`"+f.name+"`")
 	}
-	authNote := "- Auth: sign-in with " + with + ". Sessions are server-side in the `sessions` table (`alexedwards/scs`; cookie `__Host-session` in production). " +
+	authNote := "- Auth: sign-in with " + with + ". " +
+		map[bool]string{true: "Built-in auth is experimental (not independently audited): treat changes to `internal/auth`, the auth services and handlers as security-sensitive, and prefer a hosted service (Supabase Auth, an OIDC provider) when in doubt. ", false: ""}[o.Auth == options.BuiltinAuth] +
+		"Sessions are server-side in the `sessions` table (`alexedwards/scs`; cookie `__Host-session` in production). " +
 		"`auth.CurrentUser(ctx)` is the signed-in user; wrap routes that need one in `auth.RequireUser`, and authorise every object access by fetching with `(id, owner_id)`. " +
 		"Every sign-in goes through `factory.Auth.signIn`, which renews the session token and replaces the CSRF token (`csrf.Rotate`). Raising `User.SessionVersion` ends all of a user's sessions (\"Sign out everywhere\"" +
 		map[bool]string{true: ", password reset", false: ""}[password] + "). "
@@ -418,6 +421,7 @@ func authDocEdits(o options.Options) []edit {
 	checklist += "\n- [ ] The " + tables + "and `sessions` tables exist (reviewed migrations;\n      `AutoMigrate` only runs in the development seed route).\n"
 
 	section := "### Authentication and sessions\n\n" +
+		map[bool]string{true: builtinWarning, false: ""}[o.Auth == options.BuiltinAuth] +
 		"This project signs users in with " + with + ". What it does, so you keep doing it as you build on it:\n\n" +
 		"- Sessions are stored server-side and can be revoked: `__Host-session` (HttpOnly, Secure,\n" +
 		"  SameSite=Lax) in production, 7 days at most and 24 hours idle. Every sign-in issues a new session token\n" +
@@ -471,7 +475,8 @@ func authDocEdits(o options.Options) []edit {
 	}
 	section += "\nWhen you add more:\n"
 
-	limitations := "- No second factor (TOTP or passkeys) yet.\n" +
+	limitations := map[bool]string{true: "- Built-in sign-in is experimental and has not been independently audited.\n", false: ""}[o.Auth == options.BuiltinAuth] +
+		"- No second factor (TOTP or passkeys) yet.\n" +
 		"- Authorisation is yours: `auth.RequireUser` only checks that someone is signed in.\n" +
 		"- The CSRF token is a double-submit cookie, replaced at sign-in and sign-out but not bound to the\n" +
 		"  session, and uses a plain cookie name.\n"
@@ -505,3 +510,10 @@ func authDocEdits(o options.Options) []edit {
 
 	return append(append(readme, agents...), security...)
 }
+
+// builtinWarning opens SECURITY.md's auth section in projects with built-in sign-in.
+const builtinWarning = "> **Built-in sign-in is experimental.** It follows current guidance (OWASP, NIST SP 800-63B-4) and is\n" +
+	"> covered by tests, but it hasn't been independently audited, and keeping passwords, sessions and\n" +
+	"> provider sign-in safe is now your job. A hosted service (Supabase Auth, or an OpenID Connect provider\n" +
+	"> such as WorkOS, Logto or Kinde: `create-gotth-plus-app --auth=supabase` or `--auth=oidc`) also takes\n" +
+	"> care of MFA, breach protection and account recovery. Use built-in sign-in when you are ready to own it.\n\n"

@@ -86,7 +86,7 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.StringVar(&f.module, "module", "", "Go module path (default github.com/<git config github.user>/<name>, or <name>)")
 	fs.IntVar(&f.port, "port", defaults.Port, "development port")
 	fs.BoolVar(&f.seedAdminKey, "seed-admin-key", defaults.SeedAdminKey, "write a random SeedAdminKey into .env (--seed-admin-key=false to skip)")
-	fs.StringVar(&f.auth, "auth", string(defaults.Auth), "sign-in: none, or builtin (email and password, server-side sessions)")
+	fs.StringVar(&f.auth, "auth", string(defaults.Auth), "sign-in: none, supabase or oidc (hosted services, recommended for production), or builtin (advanced, experimental)")
 	fs.StringVar(&f.authMethods, "auth-methods", "password", "with --auth=builtin, the sign-in methods: any of password, google, github, apple (comma-separated)")
 	fs.StringVar(&f.oidcPreset, "oidc-preset", string(defaults.OIDCPreset), "with --auth=oidc, the provider: workos, logto, kinde, auth0, zitadel, keycloak or other")
 	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
@@ -401,6 +401,10 @@ func printNextSteps(w io.Writer, o options.Options, dir string, stepsOK bool) {
 		fmt.Fprintf(w, "  make seed     # with make dev running: sample data, and dev@example.com (password: SeedUserPassword in .env)\n")
 	}
 	fmt.Fprintln(w)
+	if o.Auth == options.BuiltinAuth {
+		fmt.Fprintf(w, "Built-in auth is experimental and hasn't been independently audited: review internal/auth and\n"+
+			"SECURITY.md before production, or consider --auth=supabase or --auth=oidc.\n")
+	}
 	fmt.Fprintf(w, "Read AGENTS.md and SECURITY.md before you build on it.\n")
 }
 

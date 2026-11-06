@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -109,6 +110,34 @@ func TestImageName(t *testing.T) {
 	for in, want := range map[string]string{"my-app": "my-app", "Bob's App": "bob-s-app", "---": "app", "a.b_c": "a.b_c"} {
 		if got := ImageName(in); got != want {
 			t.Errorf("ImageName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestRepoWorkflowUsesPins: this repository's own CI uses the same pinned actions, images and
+// Tailwind build as the projects it generates, so make update-deps (pins.go) and the workflow
+// can't drift apart unnoticed.
+func TestRepoWorkflowUsesPins(t *testing.T) {
+	b, err := os.ReadFile("../../.github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := string(b)
+	for _, want := range []string{
+		"uses: " + checkoutAction,
+		"uses: " + setupGoAction,
+		"image: " + postgresImage,
+		"image: " + mysqlImage,
+		"/download/" + tailwindVersion + "/tailwindcss-linux-x64",
+		tailwindSHA256X64,
+	} {
+		if !strings.Contains(w, want) {
+			t.Errorf(".github/workflows/ci.yml doesn't use %q (internal/scaffold/pins.go): update the workflow", want)
+		}
+	}
+	for _, line := range strings.Split(w, "\n") {
+		if strings.Contains(line, "uses:") && !pinnedAction.MatchString(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))+"\n") {
+			t.Errorf("action not pinned to a commit: %s", line)
 		}
 	}
 }

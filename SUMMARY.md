@@ -20,10 +20,27 @@ generated Postgres projects when `CGPA_TEST_POSTGRES_URL` points at a server.
 | 6b | `23487c5` | Google, GitHub, Apple (`--auth-methods`) |
 | 6c | `1d85492` | Generic OIDC (`--auth=oidc`, `--oidc-preset`: WorkOS, Logto, Kinde, Auth0, Zitadel, Keycloak, other) |
 | 6d | `ec13919` | Supabase Auth (`--auth=supabase`) |
+| 7 | (2026-11-06, uncommitted at writing) | CI for this repo; hosted auth recommended, built-in auth labelled advanced/experimental |
 
-**Next: step 7**, a CI workflow for this repository that runs `make test` (with Postgres and
-MySQL service containers, so the generated server-database projects' tests run too), then merging
-`build-cli`.
+**Next:** push `build-cli` and watch the first CI run (it is the first real MySQL, `docker build`,
+GitHub Actions and browser-on-Linux run), then merge.
+
+### 2026-11-06
+
+- **Auth steering:** the sign-in question lists None first (fine for learning and prototypes), then
+  Supabase Auth and OIDC providers as the recommended hosted services, then Built-in "(advanced,
+  experimental)". `--auth` help,
+  the summary ("Built-in (experimental): ..."), the next steps, and generated SECURITY.md (a
+  warning at the top of the auth section, and a known limitation), AGENTS.md and README say the same.
+- **Step 7 CI** (`.github/workflows/ci.yml`): `make test` with Postgres and MySQL services, lint
+  (gofmt, vet, `go mod verify`, govulncheck, actionlint with shellcheck on generated workflows),
+  `docker build` and run of generated images, and a generated project's own `make test` with
+  browser tests. `TestRepoWorkflowUsesPins` keeps its pins equal to `pins.go`.
+- **Local Go setup:** `/usr/bin/go` (Arch's `go` package, built with `GOEXPERIMENT=nodwarf5`) now
+  comes before mise's Go in `PATH`, while `GOROOT` points at mise's install, so every build fails
+  with "version go1.27.3 does not match go tool version go1.27.3-X:nodwarf5". Today's commands put
+  mise's Go first in `PATH`. Fix: put mise's shims before `/usr/bin` in `PATH`, or stop exporting
+  `GOROOT`, or uninstall Arch's `go` package.
 
 ## How the generator works
 
@@ -81,12 +98,9 @@ These go beyond, or differ from, what `SPEC.md` says:
 
 ## Not tested against the real thing
 
-- **MySQL**: generated MySQL projects are built and vetted, but their tests never ran against a
-  server (no MySQL locally; this user can't use Docker). Run
-  `CGPA_TEST_MYSQL_URL='root:pass@tcp(localhost:3306)/?parseTime=true' make test`.
-- **`docker build`**: the Dockerfile was checked by running its build steps on the host and the
-  binary as the image would. The generated CI's Docker job will be the first real build.
-- **GitHub Actions**: generated workflows pass `actionlint` (without shellcheck), but haven't run.
+- **MySQL, `docker build`, GitHub Actions**: never run locally (no MySQL server, no Docker access).
+  The repo's CI covers all three; its first run is the first real check. Generated workflows pass
+  `actionlint` locally (without shellcheck; CI adds it).
 - **Real providers**: Google, GitHub, Apple, OIDC and Supabase were tested only against fakes in
   the generated tests. Apple needs an https tunnel to try locally.
 - **Unverified facts**: Kinde's issuer format (`https://<business>.kinde.com`), the Auth0, Zitadel

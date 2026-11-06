@@ -32,7 +32,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--module` | `github.com/<git config github.user>/<name>`, or `<name>` | Go module path |
 | `--port` | `3000` | Development port (`.env`) |
 | `--seed-admin-key` | `true` | Write a random `SeedAdminKey` into `.env` |
-| `--auth` | `none` | `none`; `builtin`: sign-in in the app itself; `oidc`: at a hosted OpenID Connect provider; or `supabase`: through Supabase Auth (email and password, and its providers; the database becomes Postgres). All on the app's own server-side sessions |
+| `--auth` | `none` | `none` (no sign-in: fine for learning and prototypes); for production, the recommended hosted services `supabase` (Supabase Auth: email and password, and its providers; the database becomes Postgres) or `oidc` (an OpenID Connect provider such as WorkOS, Logto or Kinde); or `builtin`: **advanced, experimental** sign-in kept in the app itself. All but `none` use the app's own server-side sessions |
 | `--oidc-preset` | `other` | With `--auth=oidc`: `workos`, `logto`, `kinde`, `auth0`, `zitadel`, `keycloak` or `other`; fills in the issuer format and setup notes in `.env.example` |
 | `--auth-methods` | `password` | With `--auth=builtin`: any of `password` (argon2id, confirmation and reset emails), `google`, `github`, `apple` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
@@ -102,3 +102,12 @@ against a server when you point it at one (the user needs to be allowed to creat
 CGPA_TEST_POSTGRES_URL='postgres://localhost:5432/postgres?sslmode=disable' \
 CGPA_TEST_MYSQL_URL='root:pass@tcp(localhost:3306)/?parseTime=true' make test
 ```
+
+### CI
+
+`.github/workflows/ci.yml` runs `make test` with Postgres and MySQL service containers (so the
+generated server-database projects' tests run too), gofmt, vet, `go mod verify`, govulncheck,
+actionlint with shellcheck on this workflow and on generated ones, a real `docker build` and run of
+generated images (read-only filesystem, non-root, `/healthz`), and a generated project's own
+`make test` with its browser tests. Its pinned actions, images and Tailwind build must match
+`internal/scaffold/pins.go`; a test fails when they drift, so update both after `make update-deps`.

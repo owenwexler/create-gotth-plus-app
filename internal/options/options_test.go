@@ -112,7 +112,7 @@ func TestParseAuthMethods(t *testing.T) {
 	}
 	o := Defaults()
 	o.Auth, o.AuthMethods = BuiltinAuth, []AuthMethod{GitHub}
-	if !o.HasOAuth() || o.HasMethod(Password) || o.AuthLabel() != "Built-in: GitHub" {
+	if !o.HasOAuth() || o.HasMethod(Password) || o.AuthLabel() != "Built-in (experimental): GitHub" {
 		t.Errorf("HasOAuth %v, password %v, label %q", o.HasOAuth(), o.HasMethod(Password), o.AuthLabel())
 	}
 	o.Auth = NoAuth

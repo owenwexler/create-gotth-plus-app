@@ -40,6 +40,8 @@ func TestBuildAuth(t *testing.T) {
 			mustContain(t, p, "internal/seed/seed.go", "h.db.AutoMigrate(model.All()...)")
 			mustContain(t, p, "go.mod", "github.com/alexedwards/scs/v2 ")
 			mustContain(t, p, "SECURITY.md", "This project signs users in with an email and a password.")
+			mustContain(t, p, "SECURITY.md", "**Built-in sign-in is experimental.**")
+			mustContain(t, p, "AGENTS.md", "Built-in auth is experimental")
 			mustContain(t, p, "AGENTS.md", "- Auth: sign-in with an email and a password")
 			mustContain(t, p, "README.md", "| GET | `/account` |")
 			if !regexp.MustCompile(`\nSeedUserPassword=[0-9a-f]{24}\n`).Match(p[".env"]) {
@@ -264,6 +266,9 @@ func TestBuildSupabase(t *testing.T) {
 	mustContain(t, p, ".env.example", "\nSupabaseURL=\nSupabasePublishableKey=\n")
 	mustContain(t, p, "internal/config/config.go", "SupabaseURL, SupabasePublishableKey must be set in production")
 	mustContain(t, p, "SECURITY.md", "never the secret or\n      service_role key")
+	if strings.Contains(string(p["SECURITY.md"]), "experimental") {
+		t.Error("Supabase sign-in is labelled experimental")
+	}
 	mustContain(t, p, "README.md", "`/auth/supabase/callback`")
 	if strings.Contains(string(p["go.mod"]), "go-oidc") || strings.Contains(string(p["go.mod"]), "x/oauth2") {
 		t.Error("go.mod has OAuth libraries Supabase sign-in doesn't use")
