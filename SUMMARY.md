@@ -1,12 +1,14 @@
-# Work summary: 2026-11-03 to 2026-11-04
+# Work summary: 2026-11-03 to 2026-11-19
 
 Where `create-gotth-plus-app` stands, for picking the work up again. The plan and the decisions
 behind it are in `SPEC.md`; how to use and develop the CLI is in `README.md`.
 
 ## Status
 
-All work is on the branch **`build-cli`** (not merged, not pushed). `make test` passes, including
-generated Postgres projects when `CGPA_TEST_POSTGRES_URL` points at a server.
+Everything is merged into `main` (PR #1 `build-cli`, PR #2 `add-htmx-preload`), and CI passes on
+GitHub: `make test` with Postgres and MySQL, lint, real `docker build`s, and a generated project's
+browser tests. Locally, `make test` also covers generated Postgres projects when
+`CGPA_TEST_POSTGRES_URL` points at a server.
 
 | Step | Commit | What |
 |---|---|---|
@@ -20,10 +22,10 @@ generated Postgres projects when `CGPA_TEST_POSTGRES_URL` points at a server.
 | 6b | `23487c5` | Google, GitHub, Apple (`--auth-methods`) |
 | 6c | `1d85492` | Generic OIDC (`--auth=oidc`, `--oidc-preset`: WorkOS, Logto, Kinde, Auth0, Zitadel, Keycloak, other) |
 | 6d | `ec13919` | Supabase Auth (`--auth=supabase`) |
-| 7 | (2026-11-06, uncommitted at writing) | CI for this repo; hosted auth recommended, built-in auth labelled advanced/experimental |
+| 7 | `5703e50` | CI for this repo; hosted auth recommended, built-in auth labelled advanced/experimental |
+| - | `e5c4de4` | htmx preload extension in generated projects; templ output fixes (PR #2) |
 
-**Next:** push `build-cli` and watch the first CI run (it is the first real MySQL, `docker build`,
-GitHub Actions and browser-on-Linux run), then merge.
+**Next:** nothing in progress. See "Not tested against the real thing" and "Open ideas" below.
 
 ### 2026-11-06
 
@@ -50,6 +52,20 @@ GitHub Actions and browser-on-Linux run), then merge.
   with "version go1.27.3 does not match go tool version go1.27.3-X:nodwarf5". Today's commands put
   mise's Go first in `PATH`. Fix: put mise's shims before `/usr/bin` in `PATH`, or stop exporting
   `GOROOT`, or uninstall Arch's `go` package.
+- **Merged:** gotth-plus PR #1 (preload extension, regenerated `*_templ.go`, flaky CSRF test fix) and
+  CLI PR #2 (preload in generated projects, per-variant templ paths). Both repos are on `main`.
+
+### 2026-11-19
+
+- **Password salt (question, no change needed):** built-in auth already salts every password.
+  `HashPassword` (`internal/auth/password.go` in generated projects) makes a new 16-byte salt from
+  `crypto/rand` for each password, and argon2id stores it inside the hash string
+  (`$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`), so no extra column is needed.
+  `TestPasswordHash` fails if two hashes of the same password match. Supabase auth keeps passwords
+  in Supabase, whose bcrypt also salts.
+- **Pepper: decided against.** A pepper (one secret key outside the database, mixed into every hash)
+  only helps if the database leaks but the app's settings don't, adds a key that must never be lost,
+  and is awkward to rotate; OWASP treats it as optional. Revisit only if there's a specific need.
 
 ## How the generator works
 
@@ -89,7 +105,8 @@ These go beyond, or differ from, what `SPEC.md` says:
 - **Sessions**: our own small GORM store for `alexedwards/scs`, instead of `scs/gormstore`, which
   has no releases and pulls in every GORM driver. 7-day lifetime, 24-hour idle,
   `__Host-session` in production. `User.SessionVersion` ends all of a user's sessions.
-- **Passwords**: argon2id, 15 to 256 characters (NIST SP 800-63B-4); Supabase: 15 to 72 (bcrypt).
+- **Passwords**: argon2id with a random 16-byte salt per password, 15 to 256 characters (NIST SP
+  800-63B-4); Supabase: 15 to 72 (bcrypt). No pepper (see 2026-11-19).
 - **Emailed links** open a page whose button POSTs (no change on GET, scanners can't use the
   token), and are built from `BaseURL`, never the Host header.
 - **OAuth**: state and nonce in a `__Host-oauth` cookie, PKCE for Google, GitHub and generic OIDC
@@ -107,9 +124,10 @@ These go beyond, or differ from, what `SPEC.md` says:
 
 ## Not tested against the real thing
 
-- **MySQL, `docker build`, GitHub Actions**: never run locally (no MySQL server, no Docker access).
-  The repo's CI covers all three; its first run is the first real check. Generated workflows pass
-  `actionlint` locally (without shellcheck; CI adds it).
+- **MySQL, `docker build`, GitHub Actions**: now covered by the repo's CI, which passed on PRs #1 and
+  #2 (generated MySQL projects' tests against MySQL 8.4, real `docker build`s and runs, actionlint
+  with shellcheck). Still never run locally (no MySQL server, no Docker access). A generated
+  project's *own* workflow has not run on GitHub yet; it is only linted.
 - **Real providers**: Google, GitHub, Apple, OIDC and Supabase were tested only against fakes in
   the generated tests. Apple needs an https tunnel to try locally.
 - **Unverified facts**: Kinde's issuer format (`https://<business>.kinde.com`), the Auth0, Zitadel
