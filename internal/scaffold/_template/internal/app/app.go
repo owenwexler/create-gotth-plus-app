@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/config"
 	"github.com/owenwexler/gotth-plus/internal/csrf"
 	"github.com/owenwexler/gotth-plus/internal/factory"
@@ -22,12 +23,14 @@ import (
 )
 
 // NewHandler wires the dependencies, registers every route, and wraps them in the global middleware.
-func NewHandler(env config.Env, db *gorm.DB) http.Handler {
-	return buildHandler(env, newMux(env, db))
+// c is the server-side cache: cache.Disabled() when CacheURL is empty.
+func NewHandler(env config.Env, db *gorm.DB, c cache.Cache) http.Handler {
+	return buildHandler(env, newMux(env, db, c))
 }
 
-// newMux wires the dependencies and registers every route. Register new routes here.
-func newMux(env config.Env, db *gorm.DB) *http.ServeMux {
+// newMux wires the dependencies and registers every route. Register new routes here. Pass c to the
+// repositories or services that read through the cache with cache.CheckCache.
+func newMux(env config.Env, db *gorm.DB, c cache.Cache) *http.ServeMux {
 	validate := validator.New()
 
 	exampleRepo := repository.NewExampleRepository(db)

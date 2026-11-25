@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/owenwexler/gotth-plus/internal/app"
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/config"
 	"github.com/owenwexler/gotth-plus/internal/csrf"
 	"github.com/owenwexler/gotth-plus/internal/mail"
@@ -25,7 +26,7 @@ func newAuthApp(t *testing.T, env config.Env) (http.Handler, *mail.Recorder) {
 	t.Helper()
 	_, db := newTestApp(t, env)
 	mailer := &mail.Recorder{}
-	return app.NewHandler(env, db, app.WithMailer(mailer)), mailer
+	return app.NewHandler(env, db, cache.Disabled(), app.WithMailer(mailer)), mailer
 }
 
 var tokenLink = regexp.MustCompile(`(/[a-z-]+)\?token=([A-Za-z0-9_-]+)`)

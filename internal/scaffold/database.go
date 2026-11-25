@@ -14,7 +14,7 @@ import (
 var replacedFiles = map[string]string{
 	"internal/database/database.go": "5a9d9edb553e97024c64ae070dea83eb50d3dafdef01be5e86021621c2e62bff",
 	"air.toml":                      "97d30276e3a1e649d03f82c483c8e18478821fbd23a83917dd991ebbf5d23579",
-	"internal/app/app.go":           "df426233cacb86db8fe80499978f38ba38d7f0f690669925b367ea436784d368",
+	"internal/app/app.go":           "52e6a92d920b6515731b71dbf3d13fa9a12581f516948bd309ff5eb1b563fea8",
 	"internal/view/pages.templ":     "1cbb98dfb1c14e4717c7fd6f4441ff9fbf42bf22e211fdc816ce1104100ecd56",
 	"internal/view/pages_templ.go":  "5981d202c9c7cc121fef933f185d6ca25c9d047dfacb4f04b5a68320a40b7aa8",
 }
@@ -40,14 +40,32 @@ func DepsKey(o options.Options) string {
 			key += "-supabase" // only the standard library on top of scs
 		}
 	}
+	switch o.Cache {
+	case options.Redis:
+		key += "-redis" // go-redis, and miniredis for the tests
+	case options.Memcached:
+		key += "-memcached" // gomemcache
+	}
 	if !o.E2E {
 		key += "-noe2e" // no playwright-go
 	}
 	return key
 }
 
-// DepsChoices returns one Options for each go.mod/go.sum pair in _deps.
+// DepsChoices returns one Options for each go.mod/go.sum pair in _deps: every database and sign-in
+// choice that changes the dependencies, with each cache.
 func DepsChoices() []options.Options {
+	var all []options.Options
+	for _, o := range depsChoicesWithoutCache() {
+		for _, c := range options.Caches {
+			o.Cache = c
+			all = append(all, o)
+		}
+	}
+	return all
+}
+
+func depsChoicesWithoutCache() []options.Options {
 	var all []options.Options
 	for _, db := range []struct {
 		db     options.Database
@@ -228,7 +246,7 @@ func serverDatabase(p Project, d options.Database, mod, dbName string) error {
 		{"README.md", "  database/         SQLite connection (GORM)\n", "  database/         " + s.label + " connection pool (GORM); dbtest/ makes throwaway test databases\n"},
 		{"README.md", "throwaway SQLite\n", "throwaway " + s.label + "\n"},
 		{"README.md", "### The JavaScript libraries\n", readmeSection + "### The JavaScript libraries\n"},
-		{"AGENTS.md", "`DatabasePath`, `SeedAdminKey`", "`DatabaseURL`, `TestDatabaseURL`, `SeedAdminKey`"},
+		{"AGENTS.md", "(`GoEnv`, `Port`, `DatabasePath`, ", "(`GoEnv`, `Port`, `DatabaseURL`, `TestDatabaseURL`, "},
 		{"AGENTS.md",
 			"- Data: SQLite (`app.db`) via GORM (`gorm.io/driver/sqlite`, CGO).",
 			"- Data: " + s.label + " via GORM (`" + s.driver + "`); the pool is configured in `internal/database`. `DatabaseURL` is required."},

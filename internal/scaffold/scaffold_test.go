@@ -212,14 +212,41 @@ func TestGeneratedProjectBuilds(t *testing.T) {
 			testGeneratedProject(t, options.SQLite, options.PureGo, "", true, options.BuiltinAuth, m)
 		})
 	}
+
+	// the caches: their tests run against an in-memory Redis or a fake Memcached, so no server is needed
+	t.Run("sqlite-purego-redis", func(t *testing.T) {
+		testGeneratedCacheProject(t, options.Redis, options.SQLite, options.PureGo, "", true, options.NoAuth)
+	})
+	t.Run("sqlite-purego-memcached-noe2e", func(t *testing.T) {
+		testGeneratedCacheProject(t, options.Memcached, options.SQLite, options.PureGo, "", false, options.NoAuth)
+	})
+	t.Run("sqlite-purego-auth-all-memcached", func(t *testing.T) {
+		testGeneratedCacheProject(t, options.Memcached, options.SQLite, options.PureGo, "", true, options.BuiltinAuth, options.AuthMethodList...)
+	})
+	t.Run("sqlite-purego-auth-password-redis-noe2e", func(t *testing.T) {
+		testGeneratedCacheProject(t, options.Redis, options.SQLite, options.PureGo, "", false, options.BuiltinAuth, options.Password)
+	})
+	t.Run("postgres-supabase-redis", func(t *testing.T) {
+		testGeneratedCacheProject(t, options.Redis, options.Postgres, options.PureGo, "CGPA_TEST_POSTGRES_URL", true, options.SupabaseAuth)
+	})
+	t.Run("mysql-memcached", func(t *testing.T) {
+		testGeneratedCacheProject(t, options.Memcached, options.MySQL, options.PureGo, "CGPA_TEST_MYSQL_URL", true, options.NoAuth)
+	})
 }
 
-// testGeneratedProject generates one project and checks it the way a user would build it.
+// testGeneratedProject generates one project, without a cache, and checks it the way a user would
+// build it.
 func testGeneratedProject(t *testing.T, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool, a options.Auth, methods ...options.AuthMethod) {
+	testGeneratedCacheProject(t, options.NoCache, db, driver, serverEnv, e2e, a, methods...)
+}
+
+// testGeneratedCacheProject is testGeneratedProject with a cache.
+func testGeneratedCacheProject(t *testing.T, c options.Cache, db options.Database, driver options.SQLiteDriver, serverEnv string, e2e bool, a options.Auth, methods ...options.AuthMethod) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), `Bob's "app" <1>`)
 	o := testOptions()
 	o.Name = "."
+	o.Cache = c
 	o.Database, o.SQLiteDriver = db, driver
 	o.E2E, o.Axe = e2e, e2e
 	o.Auth = a

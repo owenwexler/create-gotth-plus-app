@@ -52,6 +52,7 @@ maintainers. If the root cause is in the template's defaults, a report here is w
 | Fail-fast config | `internal/config/config.go` | An unknown `GoEnv` refuses to boot instead of silently acting like development. |
 | Dev-only routes removed in production | `internal/app/app.go` | `POST /seed` is not registered at all when `GoEnv=production`, and can be gated by `SeedAdminKey` in development. |
 | No directory listings | `internal/app/app.go` (`staticFiles`) | Only files under `static/` are served, never a directory index. |
+| Cache that fails safe | `internal/cache` | Optional (`CacheURL`). Short timeouts; a cache outage falls back to the database instead of failing requests; failed fetches are never cached; errors about `CacheURL` never repeat its password. |
 | Input validation | `internal/dto`, `internal/factory` | DTOs with `go-playground/validator` tags, length caps, trimmed input. |
 | LIKE escaping | `internal/escaper` | Escapes `%`, `_` and `\` for literal search matches. |
 | Tests | `internal/csrf`, `internal/middleware/protect_test.go`, `cmd/server/*_test.go` | Unit tests for CSRF and the middleware; E2E checks that no third-party requests are made. |
@@ -70,6 +71,9 @@ Go through this before the first deploy and again after any large change.
       server. `.env` stays git-ignored.
 - [ ] `DatabasePath` points outside `static/` and outside any directory the web server serves.
       The database file and its `-wal`/`-shm` files are readable only by the app's user (`chmod 600`).
+- [ ] If `CacheURL` is set: the cache server is reachable only from the app (private network or
+      firewall), requires a password (or ACL user), and is connected to over TLS (`rediss://`)
+      unless it is on the same host. `CacheURL` comes from the secret store.
 
 **Network and TLS**
 
@@ -209,6 +213,28 @@ security headers. When you add middleware:
   explicitly.
 - `mattn/go-sqlite3` is a C library. Keep it updated and watch `govulncheck` for it.
 
+### Server-side cache
+
+The cache (`internal/cache`, off until `CacheURL` is set) holds copies of your data outside the
+database, so it needs the same care as the database:
+
+- **Keep the cache server private.** Never expose Redis (or Memcached) to the internet: an open
+  cache server can be read, filled with poisoned entries, or flushed by anyone. Bind it to a private
+  network, firewall it, and set a password or an ACL user. Use TLS (`rediss://`) for anything that
+  isn't localhost.
+- **Key on everything the value depends on.** Per-user data needs the user (or owner) in the key,
+  e.g. `tasks:owner:<id>`. A key without it serves one user's data to another. Authorise the
+  request before reading the cache, exactly as you would before querying the database.
+- **Invalidate on writes.** Delete the keys a change affects (`c.Delete`), or keep the TTL short
+  enough that stale data is harmless. Stale permissions or "deleted" data in a cache is a real bug.
+- **Don't cache secrets** (password hashes, session data, tokens) or anything you'd have to erase on
+  request without also deleting it from the cache. Entries are plain JSON on the cache server.
+- **Don't put secrets in keys.** Keys are logged at debug level on hits and misses.
+- **Share a server carefully.** `CacheKeyPrefix` keeps apps or environments apart by naming only;
+  anyone with the password sees every key. Use separate servers (or ACLs) for production.
+- A cache outage only slows the app down: `CheckCache` falls back to the database, and `/healthz`
+  doesn't check the cache. Watch for "cache read failed" warnings in the logs.
+
 ### Authentication and sessions (when you add users)
 
 The template has none of this yet. When you add it:
@@ -300,7 +326,8 @@ use the proxy or a shared store if you need a global limit.
 - `mattn/go-sqlite3` needs CGO, so the binary is not fully static. Use a base image with a
   compatible libc, or switch to `modernc.org/sqlite` (pure Go) if you want `CGO_ENABLED=0`.
 - Read-only root filesystem, with a single writable volume for the SQLite file.
-- No secrets baked into the image or build args; pass them at runtime.
+- No secrets baked into the image or build args; pass them at runtime (`CacheURL` included, since it
+  carries the cache's password).
 - Back up the database, and protect the backups like the database itself.
 
 ---

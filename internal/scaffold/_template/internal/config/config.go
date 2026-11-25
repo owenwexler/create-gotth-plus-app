@@ -14,6 +14,10 @@ type Env struct {
 	Port  string
 	// DatabasePath is the SQLite file. Defaults to app.db.
 	DatabasePath string
+	// CacheURL is the server-side cache: a Redis or Redis-compatible server. Empty: no cache.
+	CacheURL string
+	// CacheKeyPrefix optionally goes in front of every cache key ("<prefix>:<key>").
+	CacheKeyPrefix string
 	// SeedAdminKey optionally protects POST /seed in development. Never used in production.
 	SeedAdminKey string
 }
@@ -35,6 +39,9 @@ func GetEnv() Env {
 		Port:         os.Getenv("Port"),
 		DatabasePath: os.Getenv("DatabasePath"),
 		SeedAdminKey: os.Getenv("SeedAdminKey"),
+
+		CacheURL:       os.Getenv("CacheURL"),
+		CacheKeyPrefix: os.Getenv("CacheKeyPrefix"),
 	}
 
 	// fail fast: an unknown mode must never silently behave like development

@@ -14,6 +14,7 @@ No Node, no npm, no bundler. Tailwind is the standalone CLI, and the three brows
 - `hx-optimistic` wired up, with rollback on server errors
 - htmx's `preload` extension loaded, ready to fetch pages and fragments on hover (see Preloading)
 - A dev-only `/seed` route and a script that runs it with a valid CSRF token
+- An optional server-side cache (Redis or Redis-compatible) and `cache.CheckCache`, which reads through it to the database
 - Unit, integration and Playwright end-to-end tests
 - `AGENTS.md` / `CLAUDE.md` guidance for AI coding agents
 
@@ -56,6 +57,42 @@ htmx's [preload extension](https://htmx.org/extensions/preload/) is loaded on ev
 
 Good candidates are tabs, pagination and "next page" links. Only preload GETs that are cheap and change nothing: a preload is a real request (sent with an `HX-Preloaded: true` header), whether or not the user clicks.
 
+### Server-side cache
+
+The app can cache database results in Redis, or anything that speaks its protocol (Valkey, KeyDB,
+Dragonfly, a managed Redis). It is off until you set `CacheURL` in `.env`:
+
+```bash
+CacheURL=redis://localhost:6379/0      # rediss://user:password@host:6380/0 for TLS
+CacheKeyPrefix=myapp                   # optional: keys become myapp:<key>
+```
+
+For a local server, install Redis or Valkey from your package manager (`redis-server` / `valkey-server`),
+or run `docker run --rm -p 6379:6379 valkey/valkey`. The tests need neither: they run against an
+in-memory Redis.
+
+`cache.CheckCache` is the read-through helper. It returns the cached value for a key, or calls your
+function (usually a repository query), caches the result as JSON for the given time, and returns it:
+
+```go
+cities, err := cache.CheckCache(ctx, c, "cities", 7*24*time.Hour,
+	func(ctx context.Context) ([]model.City, error) { return repo.Cities(ctx) })
+```
+
+- An error from your function is returned and never cached.
+- The cache failing never fails a request: a read error counts as a miss and a write error is only
+  logged, so with the cache server down every call goes to the database. Short timeouts keep that
+  fallback quick.
+- With no `CacheURL`, the cache is `cache.Disabled()` and `CheckCache` always calls your function, so
+  the same code runs with or without a cache server.
+- Put everything the value depends on in the key (above all the user, for per-user data), and call
+  `c.Delete(ctx, key)` when the data changes, or keep the time short enough that stale data doesn't matter.
+
+`main.go` connects at startup (`cache.Connect`) and passes the cache to `app.NewHandler`; hand it from
+`newMux` to the repositories or services that need it. A bad `CacheURL` stops the app at startup; a cache
+server that doesn't answer is only a warning in the log. `/healthz` doesn't check the cache, because the
+app works without it.
+
 ### Seed data
 
 With the server running in development:
@@ -67,9 +104,10 @@ make seed     # POST /seed with a valid CSRF token; loads seedData.json
 ## Project structure
 
 ```
-cmd/server/         entry point: config, database, server start, graceful shutdown
+cmd/server/         entry point: config, database, cache, server start, graceful shutdown
 internal/
   app/              routes (newMux) and middleware chain (buildHandler), shared by main and the tests
+  cache/            optional server-side cache (Redis) and CheckCache
   config/           environment loading and validation
   csrf/             double-submit-cookie CSRF protection
   database/         SQLite connection (GORM)
@@ -143,4 +181,5 @@ The example app (the hello form and the counter) is confined to:
 - Set `GoEnv=production`. That enables HSTS, `Secure` cookies, JSON logs and strict rate limits, and unregisters `/seed`.
 - Serve behind HTTPS. The rate limiter keys on the TCP peer address, so behind a reverse proxy put real-IP handling in front of it or rate-limit at the proxy.
 - Commit the downloaded JS libraries and build `static/output.css` in your deploy step.
+- If you use the cache, point `CacheURL` at a server only the app can reach, with a password and TLS (`rediss://`). See `SECURITY.md`.
 - See `AGENTS.md` for the full conventions and security checklist.

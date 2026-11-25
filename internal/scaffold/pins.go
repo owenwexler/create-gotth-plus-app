@@ -4,12 +4,12 @@ package scaffold
 
 // Versions that generated Dockerfiles and CI workflows download, pinned by checksum or commit.
 const (
-	tailwindVersion     = "v4.3.4"
-	tailwindSHA256X64   = "149a8ece5b855587a9c10de6da9dcbcfad0e47c4ed5dca219f721b3eae39d817"
-	tailwindSHA256Arm64 = "f6d7baae1d350ed3a2defe98d0b5cc58e37400c0173b2e38d42f690ccc4bbfe1"
+	tailwindVersion     = "v4.3.5"
+	tailwindSHA256X64   = "e47695cee3f0d90623a91f3939b08bdee610eb5ad99340adff9d4145b284d6cc"
+	tailwindSHA256Arm64 = "ffcd0d21dbd7c605dc12743ff0c0b47debc963c86b399674084c1c8f2c96ecad"
 
 	checkoutAction = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
-	setupGoAction  = "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0"
+	setupGoAction  = "actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0"
 
 	goImage       = "golang:1.27.3-trixie"
 	postgresImage = "postgres:18"

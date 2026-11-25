@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/owenwexler/gotth-plus/internal/app"
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/config"
 	"github.com/owenwexler/gotth-plus/internal/database"
 	"github.com/owenwexler/gotth-plus/internal/model"
@@ -48,7 +49,7 @@ func newTestApp(t *testing.T, env config.Env) (http.Handler, *gorm.DB) {
 		t.Fatalf("migrate test db: %v", err)
 	}
 
-	return app.NewHandler(env, db), db
+	return app.NewHandler(env, db, cache.Disabled()), db
 }
 
 var devEnv = config.Env{GoEnv: "development", Port: "0"}

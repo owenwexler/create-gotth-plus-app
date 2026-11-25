@@ -130,6 +130,7 @@ func TestErrors(t *testing.T) {
 		{"bad port", []string{"--yes", "app", "--port", "7331"}, exitError, "live-reload"},
 		{"not empty", []string{"--yes", "taken"}, exitError, "not empty"},
 		{"bad db", []string{"--yes", "app", "--db", "oracle"}, exitError, "unknown database"},
+		{"bad cache", []string{"--yes", "app", "--cache", "mongodb"}, exitError, "unknown cache"},
 		{"bad sqlite driver", []string{"--yes", "app", "--sqlite-driver", "wasm"}, exitError, "unknown SQLite driver"},
 		{"sqlite driver with postgres", []string{"--yes", "app", "--db=postgres", "--sqlite-driver=cgo"}, exitError, "only applies to --db=sqlite"},
 		{"axe without e2e", []string{"--yes", "app", "--e2e=false", "--axe"}, exitError, "only applies with the E2E tests"},
@@ -381,4 +382,38 @@ func TestSupabaseFlag(t *testing.T) {
 	if code, _, errOut := runCLI(t, t.TempDir(), "--yes", "--auth=supabase", "--db=sqlite", "app"); code != exitError || !strings.Contains(errOut, "Supabase's Postgres") {
 		t.Errorf("--db=sqlite with Supabase: exit %d, %q", code, errOut)
 	}
+}
+
+func TestCacheFlag(t *testing.T) {
+	for _, tc := range []struct {
+		flag, label, hint, file string
+	}{
+		{"--cache=redis", "Cache                Redis", "redis://localhost:6379/0", "internal/cache/redis.go"},
+		{"--cache=memcached", "Cache                Memcached", "memcached://localhost:11211", "internal/cache/memcached.go"},
+	} {
+		dir := t.TempDir()
+		code, out, errOut := runCLI(t, dir, "--yes", tc.flag, "cache-app")
+		if code != exitOK {
+			t.Fatalf("%s: exit %d: %s", tc.flag, code, errOut)
+		}
+		if !strings.Contains(out, tc.label) || !strings.Contains(out, tc.hint) {
+			t.Errorf("%s: summary or next steps don't mention the cache:\n%s", tc.flag, out)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "cache-app", tc.file)); err != nil {
+			t.Errorf("%s: %v", tc.flag, err)
+		}
+	}
+
+	dir := t.TempDir()
+	code, out, errOut := runCLI(t, dir, "--yes", "plain-app")
+	if code != exitOK {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	if !strings.Contains(out, "Cache                None") {
+		t.Errorf("summary has no cache row:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "plain-app", "internal", "cache")); err == nil {
+		t.Error("internal/cache was generated without --cache")
+	}
+
 }

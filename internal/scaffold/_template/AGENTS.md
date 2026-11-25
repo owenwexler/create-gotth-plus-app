@@ -150,6 +150,9 @@ static/               input.css, built CSS, fonts, icons
 - Escape `LIKE` wildcards (`%`, `_`) in user search terms, and set a max search length.
 - Use transactions for multi-step writes; keep them short.
 - Run migrations explicitly; don't rely on `AutoMigrate` in production without review.
+- Cache read-heavy, rarely-changing query results server-side (read-through, with a TTL), not every query. Key on
+  everything the result depends on (including the user/owner), invalidate on writes, and never let a cache outage
+  fail a request: fall back to the database.
 
 **Frontend**
 - Static assets: `Cache-Control: public, max-age=31536000, immutable` for hashed filenames; `no-cache` (ETag) for HTML.
@@ -252,11 +255,12 @@ Before finishing a task, verify:
 
 **GOTTH+ template** — a splash page plus a small example app (a hello form driven by htmx and a counter driven by Alpine). Replace this paragraph with a description of your app.
 
-- Module: `github.com/owenwexler/gotth-plus` (rename it in `go.mod` and the imports). Entry: `cmd/server/main.go`. Config via `.env` (`GoEnv`, `Port`, `DatabasePath`, `SeedAdminKey`); see `.env.example`.
+- Module: `github.com/owenwexler/gotth-plus` (rename it in `go.mod` and the imports). Entry: `cmd/server/main.go`. Config via `.env` (`GoEnv`, `Port`, `DatabasePath`, `CacheURL`, `CacheKeyPrefix`, `SeedAdminKey`); see `.env.example`.
 - No Node and no npm anywhere: Tailwind is the standalone CLI, and htmx, its `preload` extension, Alpine (CSP build) and `hx-optimistic` are downloaded into `static/js` by `download-js.sh` (`make js`), which needs only git and curl.
 - Dev workflow: `make setup` once, then `make dev` (Tailwind `--watch` plus `templ generate --watch` with its live-reload proxy on port 7331; templ starts the server for you). `make air` is the alternative (config in `air.toml`; excludes `*_templ.go`).
 - Before finishing: `make check` (generate, format, vet, and `make test`: unit, integration and end-to-end tests). The browser tests need `make e2e-install` once (`make setup` does it).
 - Data: SQLite (`app.db`) via GORM (`gorm.io/driver/sqlite`, CGO). `model.Example` is a placeholder model with a UUID primary key and soft-delete (`DeletedAt`).
+- Cache: optional, off while `CacheURL` is empty. `internal/cache` has the `Cache` interface, the Redis client (`cache.Connect`, `redis.go`; any Redis-compatible server works), `cache.Disabled()` (stores nothing) and `cache.CheckCache[T](ctx, c, key, ttl, fetch)`, which returns the cached value or calls `fetch`, caches its result as JSON for `ttl` and returns it. Fetch errors are never cached, and cache errors never fail a request (they are logged and fall back to `fetch`). `main.go` connects and passes the cache to `app.NewHandler(env, db, c)`; tests pass `cache.Disabled()`. Read through the cache in repositories or services, never in handlers; put the owner/user in keys for per-user data, and `c.Delete` keys when their data changes. Cache tests run against an in-memory Redis (miniredis), so no server is needed; `testContract` in `cache_test.go` is what every client must pass.
 - Wiring: routes are registered in `newMux` and the global middleware chain is built in `buildHandler`, both in `internal/app/app.go` (`app.NewHandler`, which `cmd/server/main.go` and the integration tests both call). Handlers are built in `internal/factory` (closures over repo/service/validator); `internal/handler` holds struct-based handlers (`HealthHandler`).
 - Middleware order (outermost first): request ID, security headers, compression, rate limit, cross-origin protection, body limit, CSRF.
 - Errors: htmx requests get an out of band toast with `HX-Reswap: none` (`respondWithToast` in `internal/factory`), or the error page with `HX-Reswap: innerHTML` (`respondWithErrorPage`), swapped into the request's target. `app.js` swaps any 4xx/5xx that sets `HX-Reswap`, and shows a generic error toast for network failures and other error responses. Full page loads get `view.ErrorPage`.

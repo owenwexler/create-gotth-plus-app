@@ -19,8 +19,8 @@ import (
 	"github.com/owenwexler/create-gotth-plus-app/internal/scaffold"
 )
 
-// modules are updated to their latest version for each database choice (the DepsKey without
-// -noe2e). Everything else stays at the template's versions.
+// modules are updated to their latest version for each database choice (the DepsKey of the
+// database alone: no auth, no cache, E2E tests). Everything else stays at the template's versions.
 var modules = map[string][]string{
 	"sqlite-cgo":    nil,
 	"sqlite-purego": {"github.com/glebarez/sqlite@latest", "github.com/glebarez/go-sqlite@latest", "modernc.org/sqlite@latest"},
@@ -28,18 +28,20 @@ var modules = map[string][]string{
 	"mysql":         {"gorm.io/driver/mysql@latest", "github.com/go-sql-driver/mysql@latest"},
 }
 
-// Modules updated to their latest version for the sign-in methods.
+// Modules updated to their latest version for the sign-in methods and caches.
 var (
 	passwordModules = []string{"github.com/alexedwards/scs/v2@latest", "golang.org/x/crypto@latest"}
 	oauthModules    = []string{"github.com/alexedwards/scs/v2@latest", "golang.org/x/oauth2@latest", "github.com/coreos/go-oidc/v3@latest"}
+	cacheModules    = map[options.Cache][]string{
+		options.Redis:     {"github.com/redis/go-redis/v9@latest", "github.com/alicebob/miniredis/v2@latest"},
+		options.Memcached: {"github.com/bradfitz/gomemcache@latest"},
+	}
 )
 
-// dbKey is the database part of a DepsKey ("sqlite-purego-auth-oauth-noe2e" -> "sqlite-purego").
-func dbKey(key string) string {
-	if i := strings.Index(key, "-auth"); i >= 0 {
-		key = key[:i]
-	}
-	return strings.TrimSuffix(key, "-noe2e")
+// dbKey is the database part of o's DepsKey ("sqlite-purego-auth-oauth-redis-noe2e" -> "sqlite-purego").
+func dbKey(o options.Options) string {
+	o.Auth, o.Cache, o.E2E = options.NoAuth, options.NoCache, true
+	return scaffold.DepsKey(o)
 }
 
 func main() {
@@ -89,7 +91,12 @@ func run() error {
 			return err
 		}
 
-		mods := append([]string{}, modules[dbKey(key)]...)
+		db, ok := modules[dbKey(o)]
+		if !ok {
+			return fmt.Errorf("%s: no modules entry for database %q", key, dbKey(o))
+		}
+		mods := append([]string{}, db...)
+		mods = append(mods, cacheModules[o.Cache]...)
 		if o.HasMethod(options.Password) {
 			mods = append(mods, passwordModules...)
 		}

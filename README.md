@@ -37,6 +37,7 @@ wrong version is a warning with install steps, not an error: the project is stil
 | `--auth-methods` | `password` | With `--auth=builtin`: any of `password` (argon2id, confirmation and reset emails), `google`, `github`, `apple` |
 | `--db` | `sqlite` | `sqlite`, `postgres` or `mysql` |
 | `--sqlite-driver` | `purego` | `purego` (glebarez/sqlite, no C compiler) or `cgo` (mattn/go-sqlite3) |
+| `--cache` | `none` | Server-side cache: `none`, `redis` (Redis or Redis-compatible: Valkey, KeyDB, Dragonfly, managed Redis) or `memcached` (Memcached or Memcached-compatible). Adds `internal/cache` with `cache.CheckCache`, and `CacheURL` in `.env` |
 | `--e2e` | `true` | Include the Playwright end-to-end tests (`--e2e=false` removes them, their make targets and dependency) |
 | `--live-reload` | `templ` | What `make dev` runs: `templ` (templ's proxy) or `air`; both reload the browser on port 7331 |
 | `--docker` | `true` | Add a production `Dockerfile` (distroless, non-root, pinned Tailwind) and `.dockerignore` |
@@ -67,14 +68,31 @@ pass `-c air.toml`, so air ignored it) with air's browser-reloading proxy on por
   it. The tests need a server too: each test creates its own throwaway database on
   `TestDatabaseURL` (or `DatabaseURL`) and drops it afterwards.
 
+### Server-side cache
+
+- **None** (the default) leaves out `internal/cache`, `CacheURL` and the cache's docs.
+- **Redis** is the template as gotth-plus ships it: `internal/cache` with a
+  [go-redis](https://github.com/redis/go-redis) client, for Redis or anything that speaks its protocol
+  (Valkey, KeyDB, Dragonfly, a managed Redis). `CacheURL=redis://localhost:6379/0`, or `rediss://` for TLS.
+- **Memcached** swaps in a [gomemcache](https://github.com/bradfitz/gomemcache) client, for Memcached
+  or anything that speaks its text protocol. `CacheURL=memcached://localhost:11211`, or several servers
+  separated by commas. The client has no passwords and no TLS, so the generated `SECURITY.md` says to keep
+  the servers on a private network.
+
+Either way the project gets `cache.CheckCache[T](ctx, c, key, ttl, fetch)`: it returns the cached
+value for `key`, or calls `fetch` (usually a database query), caches the result as JSON for `ttl`, and
+returns it. Fetch errors are never cached, and the cache failing never fails a request: it falls back
+to `fetch`. The cache stays off until `CacheURL` is set, so the project runs without a cache server, and
+its cache tests run against an in-memory Redis or a fake Memcached server, so they don't need one either.
+
 ## How it works
 
 The gotth-plus template is embedded in the binary (`internal/scaffold/_template`), so the CLI works
 offline and each CLI version always produces the same project. The generator reads the template into
 memory, applies the answers, and only then writes files.
 
-Database choices add or replace files from `internal/scaffold/_variants`, and swap in the
-`go.mod`/`go.sum` from `internal/scaffold/_deps` (made by `make update-deps`, so a new project is
+Database, sign-in and cache choices add or replace files from `internal/scaffold/_variants`, and swap in the
+`go.mod`/`go.sum` from `internal/scaffold/_deps` (one set for each combination that changes the dependencies) (made by `make update-deps`, so a new project is
 tidy without network access). A variant file that replaces a template file records the template
 file's hash; when gotth-plus changes that file, generation stops until the variant is reviewed.
 

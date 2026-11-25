@@ -23,6 +23,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/owenwexler/gotth-plus/internal/app"
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/model"
 	"github.com/owenwexler/gotth-plus/internal/repository"
 )
@@ -92,7 +93,7 @@ func newOAuthApp(t *testing.T) *oauthApp {
 	// cgpa:end
 
 	_, a.db = newTestApp(t, env)
-	a.handler = app.NewHandler(env, a.db, opts...)
+	a.handler = app.NewHandler(env, a.db, cache.Disabled(), opts...)
 	return a
 }
 

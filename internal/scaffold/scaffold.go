@@ -137,6 +137,8 @@ func build(fsys fs.FS, opts options.Options, dir string, withDeps bool) (Project
 		}},
 		{"live reload", func() error { return applyLiveReload(p, opts) }},
 		{"auth", func() error { return applyAuth(p, opts) }},
+		// after auth: the auth variants' app.go and tests take the cache too
+		{"cache", func() error { return applyCache(p, opts, templateModule) }},
 		{"dependencies", func() error {
 			if !withDeps {
 				return nil
@@ -251,6 +253,19 @@ func (p Project) replaceOnce(file, old, new string) error {
 		return fmt.Errorf("%s: expected %q once, found it %d times", file, old, n)
 	}
 	p[file] = []byte(strings.Replace(string(b), old, new, 1))
+	return nil
+}
+
+// replaceCount is replaceOnce for text that must occur exactly n times; every occurrence is replaced.
+func (p Project) replaceCount(file, old, new string, n int) error {
+	b, ok := p[file]
+	if !ok {
+		return fmt.Errorf("%s: not in template", file)
+	}
+	if got := strings.Count(string(b), old); got != n {
+		return fmt.Errorf("%s: expected %q %d times, found it %d times", file, old, n, got)
+	}
+	p[file] = []byte(strings.ReplaceAll(string(b), old, new))
 	return nil
 }
 

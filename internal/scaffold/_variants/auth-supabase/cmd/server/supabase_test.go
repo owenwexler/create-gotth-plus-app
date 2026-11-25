@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/owenwexler/gotth-plus/internal/app"
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/model"
 )
 
@@ -223,7 +224,7 @@ func newSupabaseApp(t *testing.T) (http.Handler, *fakeSupabase, *gorm.DB) {
 	env.BaseURL = "http://app.example"
 	env.SupabaseURL, env.SupabasePublishableKey, env.SupabaseProviders = f.srv.URL, supabaseTestKey, "google, github"
 	_, db := newTestApp(t, env)
-	return app.NewHandler(env, db), f, db
+	return app.NewHandler(env, db, cache.Disabled()), f, db
 }
 
 func countUsers(t *testing.T, db *gorm.DB) int64 {

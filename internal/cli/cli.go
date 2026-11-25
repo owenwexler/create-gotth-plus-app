@@ -63,6 +63,7 @@ type flags struct {
 	oidcPreset   string
 	db           string
 	sqliteDriver string
+	cache        string
 
 	js, axe, git, setup, e2e, docker, ci bool
 	liveReload                           string
@@ -91,6 +92,7 @@ func newFlagSet(f *flags, stderr io.Writer) *flag.FlagSet {
 	fs.StringVar(&f.oidcPreset, "oidc-preset", string(defaults.OIDCPreset), "with --auth=oidc, the provider: workos, logto, kinde, auth0, zitadel, keycloak or other")
 	fs.StringVar(&f.db, "db", string(defaults.Database), "database: sqlite, postgres or mysql")
 	fs.StringVar(&f.sqliteDriver, "sqlite-driver", string(defaults.SQLiteDriver), "SQLite driver: purego (no C compiler) or cgo (mattn/go-sqlite3)")
+	fs.StringVar(&f.cache, "cache", string(defaults.Cache), "server-side cache: none, redis (or Redis-compatible: Valkey, KeyDB, Dragonfly) or memcached (or Memcached-compatible)")
 	fs.BoolVar(&f.e2e, "e2e", defaults.E2E, "include the Playwright end-to-end (browser) tests")
 	fs.StringVar(&f.liveReload, "live-reload", string(defaults.LiveReload), "what make dev runs: templ (templ's proxy) or air")
 	fs.BoolVar(&f.docker, "docker", defaults.Docker, "add a production Dockerfile (distroless, non-root)")
@@ -208,6 +210,9 @@ func run(ctx context.Context, f *flags, tmpl fs.FS, stdio IO) error {
 		return err
 	}
 	if opts.SQLiteDriver, err = options.ParseSQLiteDriver(f.sqliteDriver); err != nil {
+		return err
+	}
+	if opts.Cache, err = options.ParseCache(f.cache); err != nil {
 		return err
 	}
 	opts.CommitJS, opts.Axe, opts.Git, opts.Setup, opts.E2E = f.js, f.axe, f.git, f.setup, f.e2e
@@ -353,6 +358,7 @@ func printSummary(w io.Writer, o options.Options, dir, version string) {
 		{"Module path", o.ModulePath},
 		{"Auth", o.AuthLabel()},
 		{"Database", o.DatabaseLabel()},
+		{"Cache", o.Cache.Label()},
 		{"Port", strconv.Itoa(o.Port)},
 		{"E2E tests", yesNo(o.E2E)},
 		{"Live reload", string(o.LiveReload)},
@@ -396,6 +402,12 @@ func printNextSteps(w io.Writer, o options.Options, dir string, stepsOK bool) {
 		fmt.Fprintf(w, "  # sign-in: create the client in %s, and put its issuer and keys in .env\n", o.OIDCPreset.Info().Where)
 	} else if o.HasOAuth() {
 		fmt.Fprintf(w, "  # sign-in providers: register an app with each and put its keys in .env (README: \"Sign-in providers\")\n")
+	}
+	switch o.Cache {
+	case options.Redis:
+		fmt.Fprintf(w, "  # cache: set CacheURL in .env, e.g. redis://localhost:6379/0 (off while it is empty)\n")
+	case options.Memcached:
+		fmt.Fprintf(w, "  # cache: set CacheURL in .env, e.g. memcached://localhost:11211 (off while it is empty)\n")
 	}
 	if o.HasMethod(options.Password) {
 		fmt.Fprintf(w, "  make seed     # with make dev running: sample data, and dev@example.com (password: SeedUserPassword in .env)\n")

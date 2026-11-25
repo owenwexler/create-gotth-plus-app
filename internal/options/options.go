@@ -34,6 +34,8 @@ type Options struct {
 	Database Database
 	// SQLiteDriver picks the SQLite driver; only used when Database is SQLite.
 	SQLiteDriver SQLiteDriver
+	// Cache is the server-side cache the app reads through (internal/cache), if any.
+	Cache Cache
 
 	// E2E keeps the Playwright end-to-end tests (cmd/server/e2e_*_test.go).
 	E2E bool
@@ -84,6 +86,48 @@ func (d Database) Label() string {
 
 // IsServer reports whether the database runs as a separate server (as opposed to a file).
 func (d Database) IsServer() bool { return d == Postgres || d == MySQL }
+
+// Cache is a server-side cache.
+type Cache string
+
+const (
+	// NoCache: no internal/cache package and no CacheURL.
+	NoCache Cache = "none"
+	// Redis: go-redis, for Redis or anything that speaks its protocol (Valkey, KeyDB, Dragonfly,
+	// managed Redis). The template as gotth-plus ships it.
+	Redis Cache = "redis"
+	// Memcached: gomemcache, for Memcached or anything that speaks its text protocol.
+	Memcached Cache = "memcached"
+)
+
+// Caches lists the caches in the order they are offered.
+var Caches = []Cache{NoCache, Redis, Memcached}
+
+// Label is the cache's display name.
+func (c Cache) Label() string {
+	switch c {
+	case NoCache:
+		return "None"
+	case Redis:
+		return "Redis (or Redis-compatible: Valkey, KeyDB, Dragonfly, ...)"
+	case Memcached:
+		return "Memcached (or Memcached-compatible)"
+	}
+	return string(c)
+}
+
+// ParseCache reads a --cache value.
+func ParseCache(s string) (Cache, error) {
+	for _, c := range Caches {
+		if string(c) == s {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("unknown cache %q; use none, redis or memcached", s)
+}
+
+// HasCache reports whether the project has a server-side cache.
+func (o Options) HasCache() bool { return o.Cache != NoCache && o.Cache != "" }
 
 // Auth is a way to sign in.
 type Auth string
@@ -310,6 +354,7 @@ func Defaults() Options {
 		OIDCPreset:   "other",
 		Database:     SQLite,
 		SQLiteDriver: PureGo,
+		Cache:        NoCache,
 		E2E:          true,
 		LiveReload:   TemplProxy,
 		Docker:       true,
@@ -427,6 +472,9 @@ func (o Options) Validate() error {
 		return err
 	}
 	if _, err := ParseSQLiteDriver(string(o.SQLiteDriver)); err != nil {
+		return err
+	}
+	if _, err := ParseCache(string(o.Cache)); err != nil {
 		return err
 	}
 	if _, err := ParseAuth(string(o.Auth)); err != nil {

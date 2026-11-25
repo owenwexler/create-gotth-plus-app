@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/owenwexler/gotth-plus/internal/auth"
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/config"
 	"github.com/owenwexler/gotth-plus/internal/csrf"
 	"github.com/owenwexler/gotth-plus/internal/factory"
@@ -71,9 +72,10 @@ func WithEndpoints(provider string, e auth.Endpoints) Option {
 }
 
 // NewHandler wires the dependencies, registers every route, and wraps them in the global middleware.
+// c is the server-side cache: cache.Disabled() when CacheURL is empty.
 //
 // cgpa:end
-func NewHandler(env config.Env, db *gorm.DB, opts ...Option) http.Handler {
+func NewHandler(env config.Env, db *gorm.DB, c cache.Cache, opts ...Option) http.Handler {
 	o := options{}
 	for _, opt := range opts {
 		opt(&o)
@@ -86,14 +88,15 @@ func NewHandler(env config.Env, db *gorm.DB, opts ...Option) http.Handler {
 
 	sessions := auth.NewSessions(db, env.IsProduction())
 	users := repository.NewUserRepository(db)
-	mux := newMux(env, db, sessions, users, o)
+	mux := newMux(env, db, c, sessions, users, o)
 
 	// the session and the signed-in user are loaded inside the CSRF check (see buildHandler)
 	return buildHandler(env, auth.Middleware(sessions, users)(mux))
 }
 
-// newMux wires the dependencies and registers every route. Register new routes here.
-func newMux(env config.Env, db *gorm.DB, sessions *scs.SessionManager, users repository.UserRepository, o options) *http.ServeMux {
+// newMux wires the dependencies and registers every route. Register new routes here. Pass c to the
+// repositories or services that read through the cache with cache.CheckCache.
+func newMux(env config.Env, db *gorm.DB, c cache.Cache, sessions *scs.SessionManager, users repository.UserRepository, o options) *http.ServeMux {
 	validate := validator.New()
 
 	exampleRepo := repository.NewExampleRepository(db)

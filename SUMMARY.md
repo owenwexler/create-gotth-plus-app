@@ -67,6 +67,25 @@ browser tests. Locally, `make test` also covers generated Postgres projects when
   only helps if the database leaks but the app's settings don't, adds a key that must never be lost,
   and is awkward to rotate; OWASP treats it as optional. Revisit only if there's a specific need.
 
+### 2026-11-25
+
+- **Server-side cache (`--cache=none|redis|memcached`, default `none`).** gotth-plus now ships
+  `internal/cache`: a `Cache` interface, a go-redis client (`cache.Connect`), `cache.Disabled()`, a key
+  prefix, and `cache.CheckCache[T]`, the Go version of the TypeScript `checkCache`: a read-through
+  helper that never caches fetch errors and, unlike the TypeScript version, never fails a request
+  when the cache does (it logs and falls back to the database). `CacheURL` (empty: off) and
+  `CacheKeyPrefix` in `.env`; `app.NewHandler(env, db, c)`.
+- The generator removes all of it for `none` (`internal/scaffold/cache.go`, with a leftovers check
+  that fails when gotth-plus mentions the cache somewhere the edits don't cover), and swaps the client
+  for gomemcache from `_variants/cache-memcached` for `memcached` (memcached:// URLs, several servers,
+  the 30-day expiration rule, no passwords or TLS, documented in the generated SECURITY.md).
+- The auth variant's `app.go` and the auth tests take the cache too. `_deps` now has a set for every
+  database/auth/cache combination (102, up from 34). `make update-deps` also moved Tailwind to v4.3.5
+  and setup-go to v7.1.0; `.github/workflows/ci.yml` follows.
+- Tests: a contract every client must pass (`testContract` in the template's `cache_test.go`), run
+  against miniredis and against a fake Memcached server in `memcached_test.go`; generated projects
+  with each cache are built, vetted and tested.
+
 ## How the generator works
 
 - `internal/scaffold/_template` is gotth-plus's committed files (`make sync-template`), embedded in
@@ -128,6 +147,8 @@ These go beyond, or differ from, what `SPEC.md` says:
   #2 (generated MySQL projects' tests against MySQL 8.4, real `docker build`s and runs, actionlint
   with shellcheck). Still never run locally (no MySQL server, no Docker access). A generated
   project's *own* workflow has not run on GitHub yet; it is only linted.
+- **Memcached**: the client was tested only against the fake server in `memcached_test.go` (no
+  Docker access locally). The Redis client also passed the contract against a real Valkey server.
 - **Real providers**: Google, GitHub, Apple, OIDC and Supabase were tested only against fakes in
   the generated tests. Apple needs an https tunnel to try locally.
 - **Unverified facts**: Kinde's issuer format (`https://<business>.kinde.com`), the Auth0, Zitadel

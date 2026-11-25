@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/owenwexler/gotth-plus/internal/app"
+	"github.com/owenwexler/gotth-plus/internal/cache"
 	"github.com/owenwexler/gotth-plus/internal/config"
 	"github.com/owenwexler/gotth-plus/internal/database"
 	"github.com/owenwexler/gotth-plus/internal/requestid"
@@ -37,9 +38,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The server-side cache (cache.Disabled() when CacheURL is empty). A bad CacheURL stops the app;
+	// a cache server that is down only slows it down, since cache.CheckCache falls back to the database.
+	appCache, err := cache.Connect(env.CacheURL, env.CacheKeyPrefix)
+	if err != nil {
+		slog.Error("cache configuration invalid", "err", err)
+		closeDB(db)
+		os.Exit(1)
+	}
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), 2*time.Second)
+	if err := appCache.Ping(pingCtx); err != nil {
+		slog.Warn("cache unreachable, reading from the database until it answers", "err", err)
+	}
+	cancelPing()
+
 	srv := &http.Server{
 		Addr:              port,
-		Handler:           app.NewHandler(env, db),
+		Handler:           app.NewHandler(env, db, appCache),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -85,8 +100,11 @@ func main() {
 		_ = srv.Close()
 	}
 
-	// only close the database once no handler can still be using it
+	// only close the database and the cache once no handler can still be using them
 	closeDB(db)
+	if err := appCache.Close(); err != nil {
+		slog.Error("closing cache", "err", err)
+	}
 	slog.Info("server stopped")
 }
 

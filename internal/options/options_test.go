@@ -120,3 +120,34 @@ func TestParseAuthMethods(t *testing.T) {
 		t.Error("no auth has OAuth")
 	}
 }
+
+func TestParseCache(t *testing.T) {
+	for _, c := range Caches {
+		if got, err := ParseCache(string(c)); err != nil || got != c {
+			t.Errorf("ParseCache(%q) = %q, %v", c, got, err)
+		}
+	}
+	for _, s := range []string{"", "Redis", "valkey", "memcache"} {
+		if _, err := ParseCache(s); err == nil {
+			t.Errorf("ParseCache(%q) = nil error, want one", s)
+		}
+	}
+	if Defaults().Cache != NoCache || Defaults().HasCache() {
+		t.Error("the default should be no cache")
+	}
+}
+
+func TestValidateCache(t *testing.T) {
+	o := Defaults()
+	o.Name, o.ModulePath = "app", "app"
+	for _, c := range Caches {
+		o.Cache = c
+		if err := o.Validate(); err != nil {
+			t.Errorf("cache %q: %v", c, err)
+		}
+	}
+	o.Cache = "mongodb"
+	if err := o.Validate(); err == nil || !strings.Contains(err.Error(), "cache") {
+		t.Errorf("Validate with an unknown cache = %v", err)
+	}
+}

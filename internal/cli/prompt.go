@@ -148,6 +148,19 @@ func (p prompter) askRest(ctx context.Context, o *options.Options, given map[str
 			WithHideFunc(func() bool { return o.Database != options.SQLite || o.Auth == options.SupabaseAuth }))
 	}
 
+	if !given["cache"] {
+		groups = append(groups, huh.NewGroup(huh.NewSelect[options.Cache]().
+			Title("Server-side cache").
+			Description("cache.CheckCache returns a cached value or reads it from the database and caches it. The cache\n"+
+				"is off until CacheURL is set in .env, and a cache that is down falls back to the database.").
+			Options(
+				huh.NewOption("None: no cache (add one later)", options.NoCache),
+				huh.NewOption("Redis, or Redis-compatible (Valkey, KeyDB, Dragonfly, managed Redis)", options.Redis),
+				huh.NewOption("Memcached, or Memcached-compatible", options.Memcached),
+			).
+			Value(&o.Cache)))
+	}
+
 	var project []huh.Field
 	if !given["e2e"] {
 		project = append(project, huh.NewConfirm().
