@@ -36,7 +36,7 @@ func allGood() fake {
 	return fake{
 		present: map[string]bool{"go": true, "templ": true, "tailwindcss": true, "make": true, "bash": true, "git": true, "curl": true, "openssl": true, "gcc": true},
 		outputs: map[string]string{
-			"go env GOVERSION":   "go1.27.3",
+			"go env GOVERSION":   "go1.27.4",
 			"go env CGO_ENABLED": "1",
 			"go env CC":          "gcc",
 			"templ version":      "v0.3.1070",
@@ -45,7 +45,7 @@ func allGood() fake {
 	}
 }
 
-var req = Requirements{Go: "1.27.3", Templ: "v0.3.1070"}
+var req = Requirements{Go: "1.27.4", Templ: "v0.3.1070"}
 
 func check(f fake, needs Needs) map[string]Result {
 	byName := map[string]Result{}
@@ -73,7 +73,7 @@ func TestAllGood(t *testing.T) {
 	if !Report(&buf, allGood().runner().Check(context.Background(), Tools(req, Needs{}))) {
 		t.Error("Report = false")
 	}
-	if !strings.Contains(buf.String(), "all found") || !strings.Contains(buf.String(), "Go go1.27.3") {
+	if !strings.Contains(buf.String(), "all found") || !strings.Contains(buf.String(), "Go go1.27.4") {
 		t.Errorf("report: %s", buf.String())
 	}
 }
@@ -86,7 +86,7 @@ func TestProblems(t *testing.T) {
 		want  string
 		needs Needs
 	}{
-		{"go too old", "Go", func(f fake) { f.outputs["go env GOVERSION"] = "go1.27.2" }, "1.27.3 or newer", Needs{}},
+		{"go too old", "Go", func(f fake) { f.outputs["go env GOVERSION"] = "go1.27.3" }, "1.27.4 or newer", Needs{}},
 		{"go missing", "Go", func(f fake) { delete(f.present, "go") }, "not found", Needs{}},
 		{"templ mismatch", "templ", func(f fake) { f.outputs["templ version"] = "v0.3.1020" }, "v0.3.1070", Needs{}},
 		{"tailwind v3", "Tailwind CSS v4 standalone CLI (tailwindcss)", func(f fake) { f.outputs["tailwindcss --help"] = "tailwindcss v3.4.1" }, "needs Tailwind CSS v4", Needs{}},
@@ -126,7 +126,7 @@ func TestReportShowsInstallSteps(t *testing.T) {
 		t.Error("Report = true with a missing tool")
 	}
 	out := buf.String()
-	for _, want := range []string{"problem  Tailwind", "Install: https://github.com/tailwindlabs/tailwindcss/releases", "can still be created", "ok       Go go1.27.3"} {
+	for _, want := range []string{"problem  Tailwind", "Install: https://github.com/tailwindlabs/tailwindcss/releases", "can still be created", "ok       Go go1.27.4"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report is missing %q:\n%s", want, out)
 		}

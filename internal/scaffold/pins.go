@@ -11,7 +11,7 @@ const (
 	checkoutAction = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 	setupGoAction  = "actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0"
 
-	goImage       = "golang:1.27.3-trixie"
+	goImage       = "golang:1.27.4-trixie"
 	postgresImage = "postgres:18"
 	mysqlImage    = "mysql:8.4"
 )

@@ -22,7 +22,7 @@ No Node, no npm, no bundler. Tailwind is the standalone CLI, and the three brows
 
 ### Prerequisites
 
-- Go 1.27.3+ and a C compiler (the SQLite driver uses CGO)
+- Go 1.27.4+ and a C compiler (the SQLite driver uses CGO)
 - [`templ`](https://templ.guide/quick-start/installation): `go install github.com/a-h/templ/cmd/templ@latest`
 - The [Tailwind CSS standalone CLI](https://tailwindcss.com/blog/standalone-cli) (v4) on your `PATH` as `tailwindcss`
 - `git`, `curl` and `make`
