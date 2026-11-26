@@ -6,7 +6,7 @@ This is to be a command-line utility to scaffold a new app using the opinionated
 
 # The Opinions: What Parts Of The Stack Do We Want To Keep No Matter What 
 * Go 
-** Go is the backbone of this stack and is a must.  1.27.3 earliest supported version for security reasons
+** Go is the backbone of this stack and is a must.  1.27.4 earliest supported version for security reasons
 * Templ 
 ** Templ is another critical part of the stack and must be supported 
 * Tailwind
@@ -58,7 +58,7 @@ This is to be a command-line utility to scaffold a new app using the opinionated
 
 # Also Worth Having
 * **Non-interactive flags** for every prompt (`--db=postgres --yes` etc), so CI and AI agents can run it without a terminal. create-t3-app has `--CI` for this.
-* **Prerequisite check** at start: Go ≥ 1.27.3, `templ`, `tailwindcss` v4, `git`, `curl`, `openssl` (used by `download-js.sh`), `make`, a C compiler only when CGO SQLite is chosen, Docker only when Postgres/MySQL + compose is chosen. Warn with install links instead of failing late.
+* **Prerequisite check** at start: Go ≥ 1.27.4, `templ`, `tailwindcss` v4, `git`, `curl`, `openssl` (used by `download-js.sh`), `make`, a C compiler only when CGO SQLite is chosen, Docker only when Postgres/MySQL + compose is chosen. Warn with install links instead of failing late.
 * **Refuse to write into a non-empty directory** unless `--force`.
 * **Summary screen** of all answers before generating.
 
@@ -227,7 +227,7 @@ Each one conflicts with something you listed as non-negotiable, so each needs a 
 
 Also worth having:
 * **Non-interactive flags** for every prompt (`--db=postgres --orm=sqlx --auth=none --blank --yes`), so CI and AI agents can run it without a terminal. create-t3-app has `--CI` for this.
-* **Prerequisite check** at start: Go ≥ 1.27.3, `templ`, `tailwindcss` v4, `git`, `curl`, `openssl` (used by `download-js.sh`), `make`, a C compiler only when CGO SQLite is chosen, Docker only when Postgres/MySQL + compose is chosen. Warn with install links instead of failing late.
+* **Prerequisite check** at start: Go ≥ 1.27.4, `templ`, `tailwindcss` v4, `git`, `curl`, `openssl` (used by `download-js.sh`), `make`, a C compiler only when CGO SQLite is chosen, Docker only when Postgres/MySQL + compose is chosen. Warn with install links instead of failing late.
 * **Refuse to write into a non-empty directory** unless `--force`.
 * **Summary screen** of all answers before generating.
 

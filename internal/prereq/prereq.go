@@ -60,7 +60,7 @@ type Needs struct {
 
 // Requirements are versions read from the template's go.mod.
 type Requirements struct {
-	Go    string // minimum Go version, e.g. "1.27.3"
+	Go    string // minimum Go version, e.g. "1.27.4"
 	Templ string // templ module version, e.g. "v0.3.1070"
 }
 
